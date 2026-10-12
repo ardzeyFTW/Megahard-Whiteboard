@@ -1,0 +1,23 @@
+// Cloudflare Worker for live collaboration. See docs/self-hosting.md.
+// No account id or secrets live here: `wrangler login` keeps your login outside the project.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "megahard-collab",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "Room" },
+      { "name": "LIMITER", "class_name": "Limiter" }
+    ]
+  },
+  // SQLite-backed Durable Objects are the kind the free plan supports.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["Limiter"] }
+  ],
+  "vars": {
+    // Websites allowed to use this server, comma separated. ":*" allows any port.
+    "ALLOWED_ORIGINS": "https://ardzeyftw.github.io,http://localhost:*,http://127.0.0.1:*"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Megahard Whiteboard",
+  "short_name": "Megahard",
+  "description": "An open-source, local-first whiteboard. Your boards never leave your device.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#2f6fde",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

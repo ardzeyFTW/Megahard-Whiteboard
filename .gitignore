@@ -1,0 +1,9 @@
+node_modules
+dist
+*.log
+.DS_Store
+
+# Cloudflare: local server data and any local secrets. Your login is kept outside the project.
+.wrangler
+.dev.vars*
+.env*
