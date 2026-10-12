@@ -19,7 +19,7 @@ import { saveGuestCache, saveYState } from '../db';
 
 // Shortcuts that can't be changed. Tool keys are configurable in Settings.
 const FIXED_SHORTCUTS: [string, string][] = [
-  ['Shift + draw', 'Straight line (pen or highlighter)'],
+  ['Shift + draw', 'Straight line (pen or highlighter); snaps while held, stays straight after release'],
   ['Double-click', 'Edit a note or text / add text'],
   ['Space + drag', 'Pan (or middle mouse, or two fingers)'],
   ['Ctrl + wheel', 'Zoom (or pinch)'],

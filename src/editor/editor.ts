@@ -183,9 +183,9 @@ const HANDLE_CURSORS: Record<Handle, string> = {
 type Interaction =
   | { kind: 'pan'; sx: number; sy: number; cam: Camera }
   | { kind: 'pinch'; dist: number; mid: Pt; cam: Camera }
-  // `raw` is the freehand path (lightly smoothed); `el` is what's shown (a straight line while Shift is held).
-  // `last` is the latest pointer position before smoothing.
-  | { kind: 'draw'; el: StrokeEl; raw: number[]; last: Pt; dynamic: boolean; straight: boolean }
+  // `raw` is the freehand path (lightly smoothed); `el` is what's shown (a straight line once Shift has been pressed).
+  // `last` is the latest pointer position before smoothing. `snap` is true only while Shift is held.
+  | { kind: 'draw'; el: StrokeEl; raw: number[]; last: Pt; dynamic: boolean; straight: boolean; snap: boolean }
   // `size` is the eraser's current on-screen size, which grows with `speed` (screen px per ms).
   | { kind: 'erase'; erased: boolean; last: Pt; sp: Pt; t: number; speed: number; size: number }
   | { kind: 'lasso'; pts: Pt[]; base: Set<string> }
@@ -1388,6 +1388,7 @@ export class Editor {
           // Mouse and touch have no pressure, so thickness follows drawing speed instead.
           dynamic: this.dynamicInk && e.pointerType !== 'pen',
           straight: false,
+          snap: false,
           el: {
             type: 'stroke',
             id: uid(),
@@ -1640,11 +1641,16 @@ export class Editor {
     this.addElements([el], false);
   }
 
-  /** While drawing, Shift turns the stroke into a straight line from where it started to the pointer. */
-  private updateStrokeShape(straight: boolean) {
+  /**
+   * While drawing, pressing Shift turns the stroke into a straight line from where it started to the pointer.
+   * The line stays straight after Shift is released, but only snaps to horizontal/vertical/45° while it's held.
+   */
+  private updateStrokeShape(shift: boolean) {
     const st = this.state;
     if (!st || st.kind !== 'draw') return;
-    st.straight = straight;
+    if (shift) st.straight = true;
+    st.snap = shift;
+    const straight = st.straight;
     const raw = st.raw;
     let points = raw;
     if (straight && raw.length >= 6) {
@@ -1654,7 +1660,7 @@ export class Editor {
       // Snap to horizontal, vertical and 45° when close.
       const angle = Math.atan2(y1 - y0, x1 - x0);
       const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-      if (Math.abs(angle - snapped) < (5 * Math.PI) / 180) {
+      if (st.snap && Math.abs(angle - snapped) < (5 * Math.PI) / 180) {
         x1 = x0 + Math.cos(snapped) * len;
         y1 = y0 + Math.sin(snapped) * len;
       }
