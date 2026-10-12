@@ -1,7 +1,7 @@
 {
   "name": "Megahard Whiteboard",
   "short_name": "Megahard",
-  "description": "An open-source, local-first whiteboard. Your boards never leave your device.",
+  "description": "A local-first whiteboard. Your boards never leave your device.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

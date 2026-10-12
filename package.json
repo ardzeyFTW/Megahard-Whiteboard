@@ -1,8 +1,8 @@
 {
   "name": "megahard-whiteboard",
   "version": "0.1.0",
-  "description": "An open-source, local-first whiteboard. Your boards stay on your device, and you can share them live.",
-  "license": "MIT",
+  "description": "A local-first whiteboard. Your boards stay on your device, and you can share them live.",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ardzeyFTW/Megahard-Whiteboard.git"

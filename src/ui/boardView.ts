@@ -296,7 +296,7 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
 
   function showAbout() {
     showModal('About Megahard Whiteboard', h('div', { class: 'about' },
-      h('p', {}, 'Megahard Whiteboard is a free, open-source whiteboard. Your boards are stored in this browser on this device. Nothing is uploaded unless you share a board: then your own sharing server (a free Cloudflare account that you set up) keeps a copy while it’s shared, and deletes it at most 7 days after.'),
+      h('p', {}, 'Megahard Whiteboard is a whiteboard that keeps your data with you. Your boards are stored in this browser on this device. Nothing is uploaded unless you share a board: then your own sharing server (a free Cloudflare account that you set up) keeps a copy while it’s shared, and deletes it at most 7 days after.'),
       h('p', {}, 'When you join someone’s board as a viewer, you get a board of your own beside it to write on. It stays on your device, and you can copy things from theirs into it.'),
       h('p', {}, `To move boards between devices or keep a backup, use "Save board file" here or "Back up all" on the home screen, then import the ${FILE_EXT} file wherever you need it.`),
       h('p', { class: 'muted' }, 'Megahard Whiteboard is an independent project. It is not affiliated with or endorsed by Microsoft.')));

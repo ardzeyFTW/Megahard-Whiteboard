@@ -1,8 +1,10 @@
 # Megahard Whiteboard
 
-A free, open-source whiteboard that keeps your boards **on your own device**. There are no accounts and no tracking, it works offline, and you can share a board to draw on it live with others.
+A whiteboard that keeps your boards **on your own device**. There are no accounts and no tracking, it works offline, and you can share a board to draw on it live with others.
 
 **[Use Megahard Whiteboard in your browser →](https://ardzeyftw.github.io/Megahard-Whiteboard/app/)** · [Website](https://ardzeyftw.github.io/Megahard-Whiteboard/)
+
+![A Kanban board with sticky notes, a hand-drawn circle and arrow, a highlighter stroke and an emoji reaction](docs/images/board-kanban.jpg)
 
 It runs in your browser, and nothing you draw is uploaded unless you share a board. To use it like a desktop app, choose **Install** in your browser's address bar (Chrome and Edge) and it gets its own window, a Start menu entry and offline support.
 
@@ -12,16 +14,25 @@ Megahard Whiteboard is an independent, clean-room project inspired by the everyd
 
 ## Features
 
-**Inking**
-- A bottom dock with an ink tray that pops up while drawing: three pens. Click a pen again for thickness and opacity sliders, two rows of colors plus a custom color picker, and line ends. Pressure-sensitive with a stylus, smoothed with a mouse or finger.
+### Inking
+
+![The ink tray with three pens, a highlighter, an eraser, lasso and ink to shape, and the options for one pen](docs/images/pen-options.png)
+
+- A bottom dock with an ink tray that pops up while drawing: three pens, a highlighter and an eraser. Click a pen again for thickness and opacity sliders, two rows of colors plus a custom color picker, and line ends. Pressure-sensitive with a stylus, smoothed with a mouse or finger.
 - Pens can draw arrows at the end or at both ends.
 - Highlighter with its own thickness, opacity and color.
 - Hold Shift while drawing for a perfectly straight line (snaps to horizontal, vertical and 45°).
-- Eraser that removes whole strokes. The eraser end of a stylus also works.
 - Lasso select.
 - **Ink to shape** (beta): tidies rough lines, rectangles, ellipses, triangles and diamonds into clean shapes. It's new and doesn't always get it right yet.
 
-**Create**
+![The eraser options: Stroke or Square mode and a size slider](docs/images/eraser-options.png)
+
+- Two erasers. **Stroke** removes whole lines it touches. **Square** rubs out only the ink it passes over. Both grow when you move fast, and you choose the size. The eraser end of a stylus also works.
+
+### Create
+
+![The create menu: sticky note colors, emoji reactions and four templates](docs/images/create-menu.png)
+
 - Sticky notes in seven colors. The text automatically shrinks to fit.
 - Text boxes.
 - Shapes: rectangle, ellipse, triangle, diamond, line and arrow. Hold Shift for perfect squares and circles, or to snap line angles.
@@ -29,22 +40,50 @@ Megahard Whiteboard is an independent, clean-room project inspired by the everyd
 - Templates: Kanban, Retrospective, SWOT and Brainstorm.
 - Reactions (emoji stamps).
 
-**Board**
-- Infinite canvas with pan and zoom: the hand tool, wheel, trackpad, pinch, Space+drag or the middle mouse button.
-- Select, move, resize, duplicate, recolor, fill and reorder items.
-- Undo and redo, copy, cut and paste (also between boards and browser tabs).
-- Background color (light or dark, including Graphite) plus a plain, grid, dotted or grid-with-dots pattern.
-- Export as PNG.
-- Settings (gear icon, or press `?`): turn dynamic line thickness on or off, and change the tool keyboard shortcuts.
+![A Brainstorm template on a dark grid background, with one note circled in blue ink](docs/images/board-dark.jpg)
 
-**Share live**
+### Board
+
+![The board menu with background colors, patterns, export and save options](docs/images/board-menu.png)
+
+- Infinite canvas with pan and zoom: the hand tool, wheel, trackpad, pinch, Space+drag or the middle mouse button. Zoom in and out from the corner controls, or **Zoom to fit** to see everything.
+- Select, move, resize, duplicate, recolor, fill and reorder items. The selection bar floats above whatever you pick. Arrow keys nudge it (Shift for bigger steps).
+- Undo and redo, copy, cut and paste (also between boards and browser tabs).
+- Background color (light or dark, including Graphite) plus a plain, grid, dotted or grid-with-dots pattern. New boards start with whichever you picked last.
+- Export as PNG, or save the board as a `.mh` file, from the menu in the top right.
+- Rename the board by clicking its name.
+
+### Settings and shortcuts
+
+Open settings with the gear icon, or press `?`.
+
+![Settings: dynamic line thickness, image quality, the sharing server and keyboard shortcuts](docs/images/settings.png)
+
+- **Dynamic line thickness**: lines get thinner when you draw fast, or press lightly with a stylus. Turn it off for an even width.
+- **Image quality**: *Standard* shrinks pictures to save space. *High (lossless)* keeps every pixel but uses much more space. Either way, hidden camera and location details (EXIF and similar metadata) are removed from images you add.
+- **Your sharing server**: show or change the address of the server you share boards through.
+- **Keyboard shortcuts**: change the key for any tool, and see every shortcut in one list.
+
+![The keyboard shortcuts list: tool keys you can change, and the fixed shortcuts for zoom, undo, copy and more](docs/images/shortcuts.png)
+
+### Share live
+
+![The Share dialog, which walks you through setting up your own sharing server](docs/images/share.png)
+
 - Share a board with an edit link or a view-only link. Everyone editing sees each other's cursors, selections and strokes as they're drawn. You choose how many people can edit (up to 10, you included, each with their own colour). Anyone past that joins as a viewer, and up to 10 viewers can watch.
-- Viewers get a board of their own beside the shared one (side by side, or top and bottom): write along, and copy things from the shared board into theirs. Their board is a normal board kept on their device.
+- Viewers follow along. They start out looking at whatever part of the board the owner is looking at, however big or small their screen is, and glide there instead of jumping. The eye button follows the owner's view, or matches their zoom again. Zooming keeps following the owner's place at the viewer's own zoom, and moving around or picking something lets go.
+- Viewers get a board of their own beside the shared one (side by side, or top and bottom): write along, and copy things from the shared board into theirs. Their board is a normal board kept on their device, with the same full set of tools.
 - People joining need no account: they enter a name (or take a suggested one, like "Blue Otter").
 - If you leave, others can keep going for an hour. Their changes come back to your board the next time you open the app.
 
-**Your data**
+The picture above is what you see the first time you press **Share**, before a server is set up. See [Sharing and the collaboration server](#sharing-and-the-collaboration-server) below.
+
+### Your data
+
+![The home screen with a New board tile, two board thumbnails, search, Import and Back up all](docs/images/home.png)
+
 - Boards autosave to the browser's IndexedDB on your device.
+- The home screen shows every board as a thumbnail. Search by name, rename, duplicate or delete a board from the **...** menu on its card, and see how much of your storage is used.
 - Each board can be saved as a `.mh` file (plain JSON), and "Back up all" saves every board in one file. Both can be imported again on any device.
 - It can be installed as an app and keeps working offline.
 
@@ -142,8 +181,10 @@ The only runtime dependency is [perfect-freehand](https://github.com/steveruizok
 
 ## Contributing
 
-Issues and pull requests are welcome. Please keep the app local-first: no network calls, analytics or required accounts. Run `npm run build` before opening a PR; it includes the type check.
+Issues and pull requests are welcome. Please keep the app local-first: no network calls, analytics or required accounts. Run `npm run build` before opening a PR; it includes the type check. By sending a pull request you agree that your contribution is licensed under the same terms as the rest of the project (see below).
 
 ## License
 
-[MIT](LICENSE)
+Megahard Whiteboard is source-available, not open source. It is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). You can use, read, change and share it for any noncommercial purpose, including personal use, hobby projects, education and charities. You can't use it commercially, and that includes selling it. If you want to use it commercially, ask first.
+
+The libraries it depends on keep their own licenses.
