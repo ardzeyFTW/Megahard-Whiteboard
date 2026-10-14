@@ -40,6 +40,8 @@ export interface ShapeEl {
   stroke: string;
   fill: string;
   strokeWidth: number;
+  /** Radians, clockwise, about the center of the box. Ink and lines have none: their points are rotated directly. */
+  rotation?: number;
 }
 
 export interface LineEl {
@@ -63,6 +65,7 @@ export interface NoteEl {
   h: number;
   color: string;
   text: string;
+  rotation?: number;
 }
 
 export interface TextEl {
@@ -77,6 +80,7 @@ export interface TextEl {
   fontSize: number;
   /** When true the box grows to fit the longest line instead of wrapping. */
   autoWidth: boolean;
+  rotation?: number;
 }
 
 export interface ImageEl {
@@ -88,6 +92,7 @@ export interface ImageEl {
   h: number;
   /** Key into BoardDoc.assets. */
   asset: string;
+  rotation?: number;
 }
 
 export type El = StrokeEl | ShapeEl | LineEl | NoteEl | TextEl | ImageEl;

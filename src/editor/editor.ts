@@ -1,6 +1,7 @@
 import type { Background, BoardDoc, Bounds, Camera, El, LineEl, Pt, ShapeEl, ShapeKind, StrokeEl } from '../types';
 import {
-  boundsOf, clipSegment, cutPolyline, eraseHit, hitTest, inLasso, normRect, rectContains, rectInside, rectsIntersect, transformEl, translateEl, unionBounds,
+  boundsOf, clipSegment, cutPolyline, eraseHit, hitTest, inLasso, normRect, rectContains, rectInside, rectsIntersect, rotateEl, rotatePt, rotationOf, transformEl, translateEl,
+  unionBounds,
 } from '../geometry';
 import { ImageCache, drawBackground, drawElement, drawElements, makeThumbnail, renderBoard, type DrawOpts } from '../render';
 import { recognizeShape } from '../ink';
@@ -176,9 +177,48 @@ function squareCursor(side: number): string {
 
 type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 const HANDLES: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
-const HANDLE_CURSORS: Record<Handle, string> = {
-  nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize',
-};
+const HANDLE_DEGREES: Record<Handle, number> = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 };
+
+/** The resize arrow for a handle, following the way the selection box is turned. */
+function resizeCursor(handle: Handle, angle: number): string {
+  const step = Math.round((HANDLE_DEGREES[handle] + (angle * 180) / Math.PI) / 45);
+  return ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'][((step % 4) + 4) % 4];
+}
+
+type Corner = 'nw' | 'ne' | 'se' | 'sw';
+/** How far from a selection's corner (on the outside) grabbing it turns the selection instead of doing nothing. */
+const ROTATE_ZONE = 30;
+
+/** A turning arrow for the mouse pointer, bent around the given corner of a selection. */
+const rotateCursors = new Map<number, string>();
+function rotateCursor(corner: Corner, angle: number): string {
+  const turns = (((Math.round({ nw: 0, ne: 90, se: 180, sw: 270 }[corner] + (angle * 180) / Math.PI)) % 360) + 360) % 360;
+  let cursor = rotateCursors.get(turns);
+  if (cursor) return cursor;
+  const shape = 'M7 17A10 10 0 0 1 17 7M3 16h8l-4 5zM16 3v8l5-4z';
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><g transform="rotate(${turns} 12 12)" stroke-linejoin="round">` +
+    `<path d="${shape}" fill="#ffffff" stroke="#ffffff" stroke-width="4"/>` +
+    `<path d="${shape}" fill="#000000" stroke="#000000" stroke-width="1.5"/>` +
+    `<path d="M7 17A10 10 0 0 1 17 7" fill="none" stroke="#000000" stroke-width="2"/></g></svg>`;
+  cursor = `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, grab`;
+  rotateCursors.set(turns, cursor);
+  return cursor;
+}
+
+/**
+ * The turned box drawn around a selection that has just been rotated, so it can be turned and resized as it looks.
+ * It only lasts while the same, unchanged elements stay selected: deselect and it's the plain box again.
+ */
+interface SelFrame {
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  angle: number;
+  /** The selected elements as the frame left them; if they've changed since, the frame no longer fits. */
+  els: El[];
+}
 
 type Interaction =
   | { kind: 'pan'; sx: number; sy: number; cam: Camera }
@@ -190,8 +230,11 @@ type Interaction =
   | { kind: 'erase'; erased: boolean; last: Pt; sp: Pt; t: number; speed: number; size: number }
   | { kind: 'lasso'; pts: Pt[]; base: Set<string> }
   | { kind: 'marquee'; start: Pt; cur: Pt; base: Set<string> }
-  | { kind: 'move'; start: Pt; sx: number; sy: number; originals: El[]; moved: boolean; clickId: string | null }
-  | { kind: 'resize'; handle: Handle; from: Bounds; originals: El[]; changed: boolean }
+  | { kind: 'move'; start: Pt; sx: number; sy: number; originals: El[]; moved: boolean; clickId: string | null; frame: SelFrame | null }
+  // With a turned `frame`, `from` and `locals` are in the frame's own, upright space: the elements turned back by its angle.
+  | { kind: 'resize'; handle: Handle; from: Bounds; originals: El[]; locals: El[]; frame: SelFrame | null; changed: boolean }
+  // `frame` is the box when the turn began, which it turns about its center; `start` is the pointer's angle around that then.
+  | { kind: 'rotate'; corner: Corner; frame: SelFrame; start: number; angle: number; originals: El[]; changed: boolean }
   | { kind: 'create'; id: string; start: Pt; el: ShapeEl | LineEl | null };
 
 const MIN_ZOOM = 0.1;
@@ -285,6 +328,7 @@ export class Editor {
   private width = 0;
   private height = 0;
   private state: Interaction | null = null;
+  private turned: SelFrame | null = null;
   private pointers = new Map<number, Pt>();
   private editing: { id: string; ta: HTMLTextAreaElement } | null = null;
   private frame = 0;
@@ -1276,6 +1320,9 @@ export class Editor {
     const z = this.cam.zoom;
     const s = this.worldToScreen(el);
     const st = ed.ta.style;
+    // The box keeps its place and turns about the element's center, wherever that is within it.
+    const rot = rotationOf(el);
+    const cx = s.x + (el.w * z) / 2, cy = s.y + (el.h * z) / 2;
     if (el.type === 'note') {
       const fit = fitNote(el.text || ' ', el.w, el.h);
       const th = Math.max(1, fit.lines.length) * fit.size * LINE_HEIGHT;
@@ -1297,6 +1344,8 @@ export class Editor {
       st.textAlign = 'left';
       st.whiteSpace = el.autoWidth ? 'pre' : 'pre-wrap';
     }
+    st.transform = rot ? `rotate(${rot}rad)` : '';
+    st.transformOrigin = rot ? `${cx - parseFloat(st.left)}px ${cy - parseFloat(st.top)}px` : '';
   }
 
   // ---------------------------------------------------------------- pointer input
@@ -1317,8 +1366,54 @@ export class Editor {
     return null;
   }
 
-  private handlePoints(b: Bounds): Record<Handle, Pt> {
-    const { x, y, w, h } = b;
+  /** The turned frame, if the selection still fits it. */
+  private activeFrame(): SelFrame | null {
+    const f = this.turned;
+    if (!f) return null;
+    const sel = this.selectedEls();
+    if (sel.length !== f.els.length || sel.some((e, i) => e !== f.els[i])) {
+      this.turned = null;
+      return null;
+    }
+    return f;
+  }
+
+  /** The frame a selection starts turning from: snug around a lone box-shaped element, else the plain box. */
+  private freshFrame(els: El[]): SelFrame | null {
+    const el = els.length === 1 ? els[0] : null;
+    if (el && el.type !== 'stroke' && el.type !== 'line') {
+      const b = boundsOf({ ...el, rotation: undefined });
+      return { cx: b.x + b.w / 2, cy: b.y + b.h / 2, w: b.w, h: b.h, angle: el.rotation ?? 0, els };
+    }
+    const b = unionBounds(els.map(boundsOf));
+    return b ? { cx: b.x + b.w / 2, cy: b.y + b.h / 2, w: b.w, h: b.h, angle: 0, els } : null;
+  }
+
+  /** The selection box as drawn on screen: its center, size and how far it's turned. */
+  private screenFrame(): { c: Pt; w: number; h: number; angle: number } | null {
+    const f = this.activeFrame();
+    if (f) {
+      const z = this.cam.zoom;
+      return { c: this.worldToScreen({ x: f.cx, y: f.cy }), w: f.w * z, h: f.h * z, angle: f.angle };
+    }
+    const b = this.selectionScreenBounds();
+    return b ? { c: { x: b.x + b.w / 2, y: b.y + b.h / 2 }, w: b.w, h: b.h, angle: 0 } : null;
+  }
+
+  /** Whether a board point is inside the selection box, however it's turned. */
+  private inSelectionBox(wp: Pt): boolean {
+    const f = this.activeFrame();
+    if (!f) {
+      const b = this.selectionBounds();
+      return !!b && rectContains(b, wp);
+    }
+    const q = rotatePt(wp, { x: f.cx, y: f.cy }, -f.angle);
+    return Math.abs(q.x - f.cx) <= f.w / 2 && Math.abs(q.y - f.cy) <= f.h / 2;
+  }
+
+  /** Handle positions of an upright box around `c`. */
+  private handlePoints(c: Pt, w: number, h: number): Record<Handle, Pt> {
+    const x = c.x - w / 2, y = c.y - h / 2;
     return {
       nw: { x, y }, n: { x: x + w / 2, y }, ne: { x: x + w, y }, e: { x: x + w, y: y + h / 2 },
       se: { x: x + w, y: y + h }, s: { x: x + w / 2, y: y + h }, sw: { x, y: y + h }, w: { x, y: y + h / 2 },
@@ -1327,11 +1422,28 @@ export class Editor {
 
   private handleAt(sp: Pt): Handle | null {
     if ((this.tool !== 'select' && this.tool !== 'lasso') || !this.selection.size || this.editing) return null;
-    const b = this.selectionScreenBounds();
-    if (!b) return null;
-    const pts = this.handlePoints(b);
+    const fr = this.screenFrame();
+    if (!fr) return null;
+    // Look at the pointer from the box's own point of view, where the box is upright.
+    const q = rotatePt(sp, fr.c, -fr.angle);
+    const pts = this.handlePoints(fr.c, fr.w, fr.h);
     for (const hd of HANDLES) {
-      if (Math.abs(sp.x - pts[hd].x) <= HANDLE_SIZE && Math.abs(sp.y - pts[hd].y) <= HANDLE_SIZE) return hd;
+      if (Math.abs(q.x - pts[hd].x) <= HANDLE_SIZE && Math.abs(q.y - pts[hd].y) <= HANDLE_SIZE) return hd;
+    }
+    return null;
+  }
+
+  /** The corner whose outside this point is near, when it's close enough to grab for turning. */
+  private rotateCornerAt(sp: Pt): Corner | null {
+    if ((this.tool !== 'select' && this.tool !== 'lasso') || !this.selection.size || this.editing) return null;
+    const fr = this.screenFrame();
+    if (!fr) return null;
+    const q = rotatePt(sp, fr.c, -fr.angle);
+    const pts = this.handlePoints(fr.c, fr.w, fr.h);
+    const corners: [Corner, number, number][] = [['nw', -1, -1], ['ne', 1, -1], ['se', 1, 1], ['sw', -1, 1]];
+    for (const [corner, sx, sy] of corners) {
+      const dx = (q.x - pts[corner].x) * sx, dy = (q.y - pts[corner].y) * sy;
+      if (dx >= 0 && dy >= 0 && Math.hypot(dx, dy) <= ROTATE_ZONE) return corner;
     }
     return null;
   }
@@ -1441,16 +1553,30 @@ export class Editor {
     const handle = this.handleAt(sp);
     if (handle) {
       const originals = this.selectedEls();
-      const from = unionBounds(originals.map(boundsOf));
+      const frame = this.activeFrame();
+      const c = frame ? { x: frame.cx, y: frame.cy } : null;
+      const locals = frame && c ? originals.map((o) => rotateEl(o, c, -frame.angle)) : originals;
+      const from = unionBounds(locals.map(boundsOf));
       if (from) {
-        this.state = { kind: 'resize', handle, from, originals, changed: false };
+        this.state = { kind: 'resize', handle, from, originals, locals, frame, changed: false };
+        return;
+      }
+    }
+    const corner = this.rotateCornerAt(sp);
+    if (corner) {
+      const originals = this.selectedEls();
+      const frame = this.activeFrame() ?? this.freshFrame(originals);
+      if (frame) {
+        this.state = {
+          kind: 'rotate', corner, frame, start: Math.atan2(wp.y - frame.cy, wp.x - frame.cx), angle: 0, originals, changed: false,
+        };
+        this.canvas.style.cursor = rotateCursor(corner, frame.angle);
         return;
       }
     }
     const hit = tool === 'select' ? this.hitAt(wp) : null;
-    const selB = this.selectionBounds();
     const move = (clickId: string | null) => {
-      this.state = { kind: 'move', start: wp, sx: sp.x, sy: sp.y, originals: this.selectedEls(), moved: false, clickId };
+      this.state = { kind: 'move', start: wp, sx: sp.x, sy: sp.y, originals: this.selectedEls(), moved: false, clickId, frame: this.activeFrame() };
     };
     if (hit) {
       if (e.shiftKey) {
@@ -1464,7 +1590,7 @@ export class Editor {
         this.selection = new Set([hit.id]);
         move(null);
       }
-    } else if (selB && rectContains(selB, wp) && !e.shiftKey) {
+    } else if (this.inSelectionBox(wp) && !e.shiftKey) {
       move(null);
     } else {
       const base = e.shiftKey ? new Set(this.selection) : new Set<string>();
@@ -1547,6 +1673,7 @@ export class Editor {
         const dx = wp.x - st.start.x, dy = wp.y - st.start.y;
         const moved = new Map(st.originals.map((o) => [o.id, translateEl(o, dx, dy)] as const));
         this.setElements(this.doc.elements.map((el) => moved.get(el.id) ?? el));
+        if (st.frame) this.turned = { ...st.frame, cx: st.frame.cx + dx, cy: st.frame.cy + dy, els: this.selectedEls() };
         this.requestRender();
         break;
       }
@@ -1555,9 +1682,37 @@ export class Editor {
           st.changed = true;
           this.checkpoint();
         }
-        const to = this.resizeTarget(st, wp, e.shiftKey);
-        const resized = new Map(st.originals.map((o) => [o.id, transformEl(o, st.from, to)] as const));
-        this.setElements(this.doc.elements.map((el) => resized.get(el.id) ?? el));
+        const f = st.frame;
+        if (f) {
+          // Resize in the box's own upright space, then turn the result back.
+          const c = { x: f.cx, y: f.cy };
+          const to = this.resizeTarget(st, rotatePt(wp, c, -f.angle), e.shiftKey);
+          const resized = new Map(st.locals.map((o) => [o.id, rotateEl(transformEl(o, st.from, to), c, f.angle)] as const));
+          this.setElements(this.doc.elements.map((el) => resized.get(el.id) ?? el));
+          const mid = rotatePt({ x: to.x + to.w / 2, y: to.y + to.h / 2 }, c, f.angle);
+          this.turned = { cx: mid.x, cy: mid.y, w: to.w, h: to.h, angle: f.angle, els: this.selectedEls() };
+        } else {
+          const to = this.resizeTarget(st, wp, e.shiftKey);
+          const resized = new Map(st.originals.map((o) => [o.id, transformEl(o, st.from, to)] as const));
+          this.setElements(this.doc.elements.map((el) => resized.get(el.id) ?? el));
+        }
+        this.requestRender();
+        break;
+      }
+      case 'rotate': {
+        if (!st.changed) {
+          st.changed = true;
+          this.checkpoint();
+        }
+        const f = st.frame;
+        let angle = Math.atan2(wp.y - f.cy, wp.x - f.cx) - st.start;
+        // Snap the box's own angle to 15° steps.
+        if (e.shiftKey) angle = Math.round((f.angle + angle) / (Math.PI / 12)) * (Math.PI / 12) - f.angle;
+        st.angle = angle;
+        const turned = new Map(st.originals.map((o) => [o.id, rotateEl(o, { x: f.cx, y: f.cy }, angle)] as const));
+        this.setElements(this.doc.elements.map((el) => turned.get(el.id) ?? el));
+        this.turned = { ...f, angle: f.angle + angle, els: this.selectedEls() };
+        this.canvas.style.cursor = rotateCursor(st.corner, f.angle + angle);
         this.requestRender();
         break;
       }
@@ -1608,6 +1763,7 @@ export class Editor {
         else if (st.clickId && !e.shiftKey) this.selection = new Set([st.clickId]);
         break;
       case 'resize':
+      case 'rotate':
         if (st.changed) this.commit();
         break;
       case 'create': {
@@ -1677,7 +1833,7 @@ export class Editor {
   private beginPinch() {
     const st = this.state;
     if (st) {
-      const changed = (st.kind === 'move' && st.moved) || (st.kind === 'resize' && st.changed) || (st.kind === 'erase' && st.erased);
+      const changed = (st.kind === 'move' && st.moved) || ((st.kind === 'resize' || st.kind === 'rotate') && st.changed) || (st.kind === 'erase' && st.erased);
       if (changed) this.commit();
       // An in-progress stroke is discarded: the second finger means "navigate".
     }
@@ -2076,13 +2232,18 @@ export class Editor {
   private updateHoverCursor(sp: Pt, wp: Pt) {
     if (this.spaceDown || this.readOnly) return;
     if (this.tool === 'select' || this.tool === 'lasso') {
+      const angle = this.screenFrame()?.angle ?? 0;
       const hd = this.handleAt(sp);
       if (hd) {
-        this.canvas.style.cursor = HANDLE_CURSORS[hd];
+        this.canvas.style.cursor = resizeCursor(hd, angle);
         return;
       }
-      const selB = this.selectionBounds();
-      if ((selB && rectContains(selB, wp)) || (this.tool === 'select' && this.hitAt(wp))) {
+      const corner = this.rotateCornerAt(sp);
+      if (corner) {
+        this.canvas.style.cursor = rotateCursor(corner, angle);
+        return;
+      }
+      if (this.inSelectionBox(wp) || (this.tool === 'select' && this.hitAt(wp))) {
         this.canvas.style.cursor = 'move';
         return;
       }
@@ -2101,6 +2262,8 @@ export class Editor {
     cancelAnimationFrame(this.frame);
     this.frame = 0;
     if (this.destroyed) return;
+    // A turned selection box is forgotten as soon as nothing is selected.
+    if (!this.selection.size) this.turned = null;
     // Picking something means looking around on your own now.
     if (this.followMode !== 'off' && this.selection.size) this.disturbFollow('select');
     // Following the owner moves the camera, so it comes before anything is drawn with it.
@@ -2206,18 +2369,39 @@ export class Editor {
         }
         ctx.globalAlpha = 1;
       }
-      const b = this.selectionScreenBounds();
-      if (b) {
+      const fr = this.screenFrame();
+      if (fr) {
         ctx.lineWidth = 1.5;
-        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        // Drawn upright around the origin, with the canvas turned to match.
+        ctx.save();
+        ctx.translate(fr.c.x, fr.c.y);
+        ctx.rotate(fr.angle);
+        ctx.strokeRect(-fr.w / 2, -fr.h / 2, fr.w, fr.h);
         if ((this.tool === 'select' || this.tool === 'lasso') && !this.editing) {
           ctx.fillStyle = '#ffffff';
-          for (const p of Object.values(this.handlePoints(b))) {
+          for (const p of Object.values(this.handlePoints({ x: 0, y: 0 }, fr.w, fr.h))) {
             ctx.fillRect(p.x - HANDLE_SIZE / 2, p.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
             ctx.strokeRect(p.x - HANDLE_SIZE / 2, p.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
           }
         }
+        ctx.restore();
       }
+    }
+
+    if (st?.kind === 'rotate' && st.changed) {
+      const sp = this.worldToScreen(this.lastPointerWorld ?? { x: st.frame.cx, y: st.frame.cy });
+      const total = st.frame.angle + st.angle;
+      const deg = Math.round(((((total * 180) / Math.PI) % 360) + 360) % 360);
+      const label = `${deg}°`;
+      ctx.font = '600 12px "Segoe UI", system-ui, sans-serif';
+      const w = ctx.measureText(label).width + 12;
+      ctx.fillStyle = ACCENT;
+      ctx.beginPath();
+      ctx.roundRect(sp.x + 14, sp.y + 14, w, 20, 6);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, sp.x + 20, sp.y + 24.5);
     }
 
     if (st?.kind === 'marquee') {

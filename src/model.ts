@@ -37,6 +37,8 @@ const str = (v: unknown, max: number): v is string => typeof v === 'string' && v
 const color = (v: unknown, fallback: string) =>
   typeof v === 'string' && /^(#[0-9a-fA-F]{3,8}|transparent)$/.test(v) ? v : fallback;
 const MAX_TEXT = 20000;
+/** A turn in radians, kept only when it's a real, non-zero angle. */
+const turn = (v: unknown) => (num(v) && v % (Math.PI * 2) !== 0 ? v % (Math.PI * 2) : undefined);
 const SAFE_IMAGE = /^data:image\/(png|jpe?g|gif|webp|avif|bmp|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
 
 /**
@@ -65,6 +67,7 @@ export function sanitizeElement(raw: unknown, opts: { fitText?: boolean } = {}):
         type: 'shape', id, kind: SHAPE_KINDS.includes(r.kind as ShapeKind) ? (r.kind as ShapeKind) : 'rect',
         x: r.x as number, y: r.y as number, w: r.w as number, h: r.h as number,
         stroke: color(r.stroke, '#1f1f1f'), fill: color(r.fill, 'transparent'), strokeWidth: clamp(r.strokeWidth, 0.5, 100),
+        rotation: turn(r.rotation),
       };
     case 'line':
       if (![r.x1, r.y1, r.x2, r.y2].every(num) || !num(r.strokeWidth)) return null;
@@ -76,7 +79,7 @@ export function sanitizeElement(raw: unknown, opts: { fitText?: boolean } = {}):
       if (!box.every(num)) return null;
       return {
         type: 'note', id, x: r.x as number, y: r.y as number, w: r.w as number, h: r.h as number,
-        color: color(r.color, '#fff4a3'), text: str(r.text, MAX_TEXT) ? r.text : '',
+        color: color(r.color, '#fff4a3'), text: str(r.text, MAX_TEXT) ? r.text : '', rotation: turn(r.rotation),
       };
     case 'text': {
       if (!box.every(num) || !num(r.fontSize)) return null;
@@ -84,11 +87,11 @@ export function sanitizeElement(raw: unknown, opts: { fitText?: boolean } = {}):
       const fontSize = clamp(r.fontSize, 4, 2000);
       const autoWidth = r.autoWidth === true;
       const fit = opts.fitText === false ? { w: r.w as number, h: r.h as number } : fitTextBox(text, fontSize, Math.max(fontSize, r.w as number), autoWidth);
-      return { type: 'text', id, x: r.x as number, y: r.y as number, w: fit.w, h: fit.h, text, color: color(r.color, '#1f1f1f'), fontSize, autoWidth };
+      return { type: 'text', id, x: r.x as number, y: r.y as number, w: fit.w, h: fit.h, text, color: color(r.color, '#1f1f1f'), fontSize, autoWidth, rotation: turn(r.rotation) };
     }
     case 'image':
       if (!box.every(num) || !str(r.asset, 100)) return null;
-      return { type: 'image', id, x: r.x as number, y: r.y as number, w: r.w as number, h: r.h as number, asset: r.asset };
+      return { type: 'image', id, x: r.x as number, y: r.y as number, w: r.w as number, h: r.h as number, asset: r.asset, rotation: turn(r.rotation) };
     default:
       return null;
   }

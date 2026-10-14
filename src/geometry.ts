@@ -52,6 +52,28 @@ export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
   return inside;
 }
 
+export function rotatePt(p: Pt, c: Pt, a: number): Pt {
+  const cos = Math.cos(a), sin = Math.sin(a);
+  const dx = p.x - c.x, dy = p.y - c.y;
+  return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos };
+}
+
+/** How far an element is turned, in radians (0 for ink and lines, which are never turned in place). */
+/** Center of a box-shaped element (the point it turns about). */
+function centerOf(el: Exclude<El, { type: 'stroke' | 'line' }>): Pt {
+  return { x: el.x + el.w / 2, y: el.y + el.h / 2 };
+}
+
+export function rotationOf(el: El): number {
+  return el.type === 'stroke' || el.type === 'line' ? 0 : el.rotation ?? 0;
+}
+
+/** Keep an angle in (-π, π]. */
+export function normAngle(a: number): number {
+  const t = a % (Math.PI * 2);
+  return t > Math.PI ? t - Math.PI * 2 : t <= -Math.PI ? t + Math.PI * 2 : t;
+}
+
 // Elements are immutable, so bounds can be cached per object.
 const boundsCache = new WeakMap<El, Bounds>();
 
@@ -73,10 +95,21 @@ export function boundsOf(el: El): Bounds {
   } else if (el.type === 'line') {
     const pad = el.strokeWidth / 2 + (el.arrowEnd ? arrowSize(el.strokeWidth) * 0.5 : 0);
     b = inflate(normRect(el.x1, el.y1, el.x2 - el.x1, el.y2 - el.y1), pad);
-  } else if (el.type === 'shape') {
-    b = inflate(normRect(el.x, el.y, el.w, el.h), el.strokeWidth / 2);
   } else {
-    b = normRect(el.x, el.y, el.w, el.h);
+    const box = normRect(el.x, el.y, el.w, el.h);
+    const rot = rotationOf(el);
+    let outer = box;
+    if (rot) {
+      // The box the turned rectangle fits in.
+      const c = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+      const corners = [
+        { x: box.x, y: box.y }, { x: box.x + box.w, y: box.y },
+        { x: box.x + box.w, y: box.y + box.h }, { x: box.x, y: box.y + box.h },
+      ].map((p) => rotatePt(p, c, rot));
+      const xs = corners.map((p) => p.x), ys = corners.map((p) => p.y);
+      outer = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    }
+    b = el.type === 'shape' ? inflate(outer, el.strokeWidth / 2) : outer;
   }
   boundsCache.set(el, b);
   return b;
@@ -122,6 +155,9 @@ function nearPolygon(poly: Pt[], p: Pt, r: number): boolean {
 /** Click hit test: shapes are hit anywhere inside, ink only near its path. */
 export function hitTest(el: El, p: Pt, tol: number): boolean {
   if (!rectContains(inflate(boundsOf(el), tol), p)) return false;
+  if (el.type !== 'stroke' && el.type !== 'line' && el.rotation) {
+    return hitTest({ ...el, rotation: undefined }, rotatePt(p, centerOf(el), -el.rotation), tol);
+  }
   switch (el.type) {
     case 'stroke':
       return nearPolyline(el.points, p, el.size / 2 + tol);
@@ -139,6 +175,9 @@ export function hitTest(el: El, p: Pt, tol: number): boolean {
 /** Eraser hit test: only ink, lines and shapes can be erased; hollow shapes only at their outline. */
 export function eraseHit(el: El, p: Pt, r: number): boolean {
   if (!rectContains(inflate(boundsOf(el), r), p)) return false;
+  if (el.type !== 'stroke' && el.type !== 'line' && el.rotation) {
+    return eraseHit({ ...el, rotation: undefined }, rotatePt(p, centerOf(el), -el.rotation), r);
+  }
   switch (el.type) {
     case 'stroke':
       return nearPolyline(el.points, p, el.size / 2 + r);
@@ -248,12 +287,51 @@ export function translateEl(el: El, dx: number, dy: number): El {
   }
 }
 
+/** Turn an element clockwise by `a` radians about point `c`. */
+export function rotateEl(el: El, c: Pt, a: number): El {
+  switch (el.type) {
+    case 'stroke': {
+      const p = el.points.slice();
+      for (let i = 0; i < p.length; i += 3) {
+        const r = rotatePt({ x: p[i], y: p[i + 1] }, c, a);
+        p[i] = r.x;
+        p[i + 1] = r.y;
+      }
+      return { ...el, points: p };
+    }
+    case 'line': {
+      const p1 = rotatePt({ x: el.x1, y: el.y1 }, c, a), p2 = rotatePt({ x: el.x2, y: el.y2 }, c, a);
+      return { ...el, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+    }
+    default: {
+      const m = rotatePt(centerOf(el), c, a);
+      const rotation = normAngle((el.rotation ?? 0) + a);
+      return { ...el, x: m.x - el.w / 2, y: m.y - el.h / 2, rotation: Math.abs(rotation) < 1e-9 ? undefined : rotation };
+    }
+  }
+}
+
 /** Map an element from one bounding box to another (used for resizing a selection). */
 export function transformEl(el: El, from: Bounds, to: Bounds): El {
   const sx = from.w > 1e-6 ? to.w / from.w : 1;
   const sy = from.h > 1e-6 ? to.h / from.h : 1;
   const X = (x: number) => to.x + (x - from.x) * sx;
   const Y = (y: number) => to.y + (y - from.y) * sy;
+  if (el.type !== 'stroke' && el.type !== 'line' && el.rotation) {
+    // A turned box can't be stretched along the board's axes, so it's scaled along its own: exact for uniform
+    // scaling and for quarter turns, a close fit in between.
+    const cos = Math.cos(el.rotation), sin = Math.sin(el.rotation);
+    const kx = Math.hypot(sx * cos, sy * sin), ky = Math.hypot(sx * sin, sy * cos);
+    const cx = X(el.x + el.w / 2), cy = Y(el.y + el.h / 2);
+    if (el.type === 'text') {
+      const fontSize = Math.max(4, el.fontSize * ky);
+      const autoWidth = el.autoWidth && Math.abs(kx - ky) < 1e-3;
+      const box = fitTextBox(el.text, fontSize, Math.max(fontSize, el.w * kx), autoWidth);
+      return { ...el, x: cx - box.w / 2, y: cy - box.h / 2, fontSize, w: box.w, h: box.h, autoWidth };
+    }
+    const w = el.w * kx, h = el.h * ky;
+    return { ...el, x: cx - w / 2, y: cy - h / 2, w, h };
+  }
   switch (el.type) {
     case 'stroke': {
       const p = el.points.slice();

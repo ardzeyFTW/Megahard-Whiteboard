@@ -1,5 +1,5 @@
 import type { Background, BoardDoc, Bounds, Camera, El } from './types';
-import { arrowSize, boundsOf, rectsIntersect, shapeOutline, unionBounds } from './geometry';
+import { arrowSize, boundsOf, rectsIntersect, rotationOf, shapeOutline, unionBounds } from './geometry';
 import { arrowHeadPath, strokePaths } from './ink';
 import { LINE_HEIGHT, NOTE_TEXT_COLOR, fitNote, font, wrapText } from './text';
 import { isDark } from './util';
@@ -117,6 +117,22 @@ function shapePath(el: Extract<El, { type: 'shape' }>): Path2D {
 }
 
 export function drawElement(ctx: CanvasRenderingContext2D, el: El, o: DrawOpts) {
+  const rot = rotationOf(el);
+  if (!rot || el.type === 'stroke' || el.type === 'line') {
+    drawUpright(ctx, el, o);
+    return;
+  }
+  // Turn the canvas about the element's center, then draw it as if it weren't turned.
+  const cx = el.x + el.w / 2, cy = el.y + el.h / 2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+  ctx.translate(-cx, -cy);
+  drawUpright(ctx, el, o);
+  ctx.restore();
+}
+
+function drawUpright(ctx: CanvasRenderingContext2D, el: El, o: DrawOpts) {
   switch (el.type) {
     case 'stroke': {
       const { body, heads } = strokePaths(el);
