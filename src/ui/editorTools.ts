@@ -274,13 +274,13 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
     ed.insertText();
   });
   const shapeBtn: HTMLButtonElement = iconButton('shapes', 'Shapes (S)', popoverButton(() => shapeBtn, shapePopover, 'above'));
-  const imageBtn = iconButton('image', 'Image or PDF', () => {
+  const importBtn = iconButton('import', 'Import image or PDF', () => {
     closePopover();
     imageInput.click();
   });
   const moreBtn: HTMLButtonElement = iconButton('addMore', 'More: sticky notes, reactions, templates', popoverButton(() => moreBtn, morePopover, 'above'));
   const mainBar = h('div', { class: 'panel dock-main', role: 'toolbar', 'aria-label': 'Tools' },
-    selectBtn, handBtn, inkBtn, sep(), textBtn, shapeBtn, imageBtn, moreBtn);
+    selectBtn, handBtn, inkBtn, sep(), textBtn, shapeBtn, importBtn, moreBtn);
   const dock = h('div', { class: 'dock' }, inkTray, mainBar);
 
   // ------------------------------------------------------------ zoom
