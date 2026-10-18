@@ -47,31 +47,41 @@ describe('rotation', () => {
 describe('layoutPages', () => {
   const page = { w: 100, h: 140 };
   it('stacks pages top to bottom', () => {
-    const l = layoutPages([page, page, page], { mode: 'vertical', columns: 2, gap: 10 });
+    const l = layoutPages([page, page, page], { mode: 'vertical', columns: 2, fill: 'across', gap: 10 });
     expect(l.positions).toEqual([{ x: 0, y: 0 }, { x: 0, y: 150 }, { x: 0, y: 300 }]);
     expect(l).toMatchObject({ w: 100, h: 440 });
   });
   it('lines pages up left to right', () => {
-    const l = layoutPages([page, page], { mode: 'horizontal', columns: 2, gap: 10 });
+    const l = layoutPages([page, page], { mode: 'horizontal', columns: 2, fill: 'across', gap: 10 });
     expect(l.positions).toEqual([{ x: 0, y: 0 }, { x: 110, y: 0 }]);
     expect(l).toMatchObject({ w: 210, h: 140 });
   });
   it('fills a grid row by row', () => {
-    const l = layoutPages([page, page, page, page, page], { mode: 'grid', columns: 2, gap: 10 });
+    const l = layoutPages([page, page, page, page, page], { mode: 'grid', columns: 2, fill: 'across', gap: 10 });
     expect(l.positions[1]).toEqual({ x: 110, y: 0 });
     expect(l.positions[2]).toEqual({ x: 0, y: 150 });
     expect(l.positions[4]).toEqual({ x: 0, y: 300 });
     expect(l).toMatchObject({ w: 210, h: 440 });
   });
+  it('fills a grid down each column when asked', () => {
+    const l = layoutPages([page, page, page, page, page], { mode: 'grid', columns: 2, fill: 'down', gap: 10 });
+    // Three rows: 1 2 3 down the first column, then 4 5.
+    expect(l.positions).toEqual([{ x: 0, y: 0 }, { x: 0, y: 150 }, { x: 0, y: 300 }, { x: 110, y: 0 }, { x: 110, y: 150 }]);
+    expect(l).toMatchObject({ w: 210, h: 440 });
+  });
+  it('ignores fill for a single column or row', () => {
+    expect(layoutPages([page, page], { mode: 'vertical', columns: 2, fill: 'down', gap: 0 }).positions).toEqual([{ x: 0, y: 0 }, { x: 0, y: 140 }]);
+    expect(layoutPages([page, page], { mode: 'horizontal', columns: 2, fill: 'down', gap: 0 }).positions).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+  });
   it('never makes more columns than pages', () => {
-    const l = layoutPages([page, page], { mode: 'grid', columns: 6, gap: 0 });
+    const l = layoutPages([page, page], { mode: 'grid', columns: 6, fill: 'across', gap: 0 });
     expect(l).toMatchObject({ w: 200, h: 140 });
   });
   it('centers a narrower page in its column', () => {
-    const l = layoutPages([{ w: 200, h: 100 }, { w: 100, h: 100 }], { mode: 'vertical', columns: 1, gap: 0 });
+    const l = layoutPages([{ w: 200, h: 100 }, { w: 100, h: 100 }], { mode: 'vertical', columns: 1, fill: 'across', gap: 0 });
     expect(l.positions[1]).toEqual({ x: 50, y: 100 });
   });
   it('is empty with no pages', () => {
-    expect(layoutPages([], { mode: 'grid', columns: 3, gap: 8 })).toEqual({ positions: [], w: 0, h: 0 });
+    expect(layoutPages([], { mode: 'grid', columns: 3, fill: 'across', gap: 8 })).toEqual({ positions: [], w: 0, h: 0 });
   });
 });

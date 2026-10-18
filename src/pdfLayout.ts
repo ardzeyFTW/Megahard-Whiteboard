@@ -5,15 +5,20 @@ export type PageRotation = 0 | 90 | 180 | 270;
 /** How imported pages are arranged: one column, one row, or a grid with a fixed number of columns. */
 export type StackMode = 'vertical' | 'horizontal' | 'grid';
 
+/** In a grid: fill each row before starting the next (1 2 / 3 4), or each column (1 3 / 2 4). */
+export type GridFill = 'across' | 'down';
+
 export interface StackOptions {
   mode: StackMode;
   /** Columns when mode is 'grid'. */
   columns: number;
+  /** Which way a grid fills. Rows and columns of one page wide ignore it. */
+  fill: GridFill;
   /** Space between pages, in board units. */
   gap: number;
 }
 
-export const DEFAULT_STACK: StackOptions = { mode: 'vertical', columns: 2, gap: 40 };
+export const DEFAULT_STACK: StackOptions = { mode: 'vertical', columns: 2, fill: 'across', gap: 40 };
 export const MAX_GRID_COLUMNS = 12;
 
 export const turn = (r: PageRotation, quarterTurns = 1): PageRotation =>
@@ -60,19 +65,25 @@ export interface Placed {
 }
 
 /**
- * Where each page's top-left goes, with the whole block's top-left at (0, 0). Pages are read left to
- * right, then top to bottom. In a row or column, a page smaller than its neighbours sits in the middle.
+ * Where each page's top-left goes, with the whole block's top-left at (0, 0). A single column runs top
+ * to bottom and a single row left to right; a grid goes by `fill`. A page smaller than its neighbours
+ * sits in the middle of its cell.
  */
 export function layoutPages(sizes: { w: number; h: number }[], opts: StackOptions): { positions: Placed[]; w: number; h: number } {
   const n = sizes.length;
   if (!n) return { positions: [], w: 0, h: 0 };
-  const cols = opts.mode === 'vertical' ? 1 : opts.mode === 'horizontal' ? n : Math.max(1, Math.min(Math.floor(opts.columns) || 1, n));
-  const rows = Math.ceil(n / cols);
+  const wanted = opts.mode === 'vertical' ? 1 : opts.mode === 'horizontal' ? n : Math.max(1, Math.min(Math.floor(opts.columns) || 1, n));
+  const down = opts.mode === 'grid' && opts.fill === 'down';
+  // Filling down, the rows come first and the columns are however many it takes.
+  const rows = Math.ceil(n / wanted);
+  const cols = down ? Math.ceil(n / rows) : wanted;
+  const cellOf = (i: number) => (down ? { c: Math.floor(i / rows), r: i % rows } : { c: i % cols, r: Math.floor(i / cols) });
   const colW = new Array<number>(cols).fill(0);
   const rowH = new Array<number>(rows).fill(0);
   sizes.forEach((s, i) => {
-    colW[i % cols] = Math.max(colW[i % cols], s.w);
-    rowH[Math.floor(i / cols)] = Math.max(rowH[Math.floor(i / cols)], s.h);
+    const { c, r } = cellOf(i);
+    colW[c] = Math.max(colW[c], s.w);
+    rowH[r] = Math.max(rowH[r], s.h);
   });
   const colX: number[] = [];
   const rowY: number[] = [];
@@ -87,7 +98,7 @@ export function layoutPages(sizes: { w: number; h: number }[], opts: StackOption
     y += hh + opts.gap;
   }
   const positions = sizes.map((s, i) => {
-    const c = i % cols, r = Math.floor(i / cols);
+    const { c, r } = cellOf(i);
     return { x: colX[c] + (colW[c] - s.w) / 2, y: rowY[r] + (rowH[r] - s.h) / 2 };
   });
   return { positions, w: x - opts.gap, h: y - opts.gap };

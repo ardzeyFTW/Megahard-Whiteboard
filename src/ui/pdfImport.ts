@@ -2,7 +2,7 @@
 import type { Editor } from '../editor/editor';
 import { PdfFile } from '../pdf';
 import {
-  DEFAULT_STACK, MAX_GRID_COLUMNS, formatPageRange, parsePageRange, rotatedSize, turn, type PageRotation, type StackMode, type StackOptions,
+  DEFAULT_STACK, MAX_GRID_COLUMNS, formatPageRange, parsePageRange, rotatedSize, turn, type GridFill, type PageRotation, type StackMode, type StackOptions,
 } from '../pdfLayout';
 import { h, segmented, showModal, textButton, toast } from './dom';
 import { icon } from './icons';
@@ -176,7 +176,12 @@ export function openPdfImport(ed: Editor, file: File) {
       const v = Math.floor(Number(columnsInput.value));
       if (v >= 1) stack.columns = Math.min(v, MAX_GRID_COLUMNS);
     });
-    const columnsRow = h('label', { class: 'pdf-columns-row' }, 'Columns', columnsInput);
+    const fill = segmented<GridFill>([['across', 'Across, then down'], ['down', 'Down, then across']], stack.fill, (v) => {
+      stack.fill = v;
+    });
+    const columnsRow = h('div', { class: 'pdf-grid-options' },
+      h('label', { class: 'pdf-columns-row' }, 'Columns', columnsInput),
+      fill);
     columnsRow.hidden = true;
     const layout = segmented<StackMode>([['vertical', 'Top to bottom'], ['horizontal', 'Left to right'], ['grid', 'Grid']], stack.mode, (mode) => {
       stack.mode = mode;

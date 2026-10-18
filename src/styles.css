@@ -764,6 +764,8 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pdf-summary { display: block; margin: 6px 0 0; font-size: 13px; }
 .pdf-layout { margin-top: 14px; }
 .pdf-layout .field-label { margin-bottom: 6px; }
-.pdf-columns-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13px; font-weight: 600; }
+.pdf-grid-options { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 10px; }
+.pdf-grid-options .segmented { flex: 1 1 260px; }
+.pdf-columns-row { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
 .pdf-columns-row .pdf-columns { width: 76px; }
 .pdf-layout .pdf-hint { margin: 10px 0 0; font-size: 12.5px; }
