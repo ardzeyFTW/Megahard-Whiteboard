@@ -15,6 +15,8 @@ import { FONT_FAMILY, LINE_HEIGHT, NOTE_PAD, NOTE_TEXT_COLOR, fitNote, fitTextBo
 import { createNote, createText, referencedAssets, sanitizeAssets, sanitizeElements } from '../model';
 import { buildTemplate, type TemplateId } from '../templates';
 import { prepareImage, type ImageQuality } from '../image';
+import { isPdfFile } from '../pdf';
+import { layoutPages, type StackOptions } from '../pdfLayout';
 import { HIGHLIGHT_COLORS, NOTE_COLORS, PEN_MAX_SIZE } from '../palette';
 import { readPrefs, writePrefs } from '../prefs';
 import { LIMITS, getUsage, type Usage } from '../limits';
@@ -298,6 +300,8 @@ export class Editor {
    * Resolves false if they can't be added.
    */
   beforeNewAssets: ((assets: Record<string, string>) => Promise<boolean>) | null = null;
+  /** Called with a PDF that was dropped or pasted on the board, so the page can ask which pages to import. */
+  onPdf: ((file: File) => void) | null = null;
   /** On a shared board: told whenever the cursor, selection, text being edited or stroke being drawn changes. */
   onPresence: ((p: LocalPresence) => void) | null = null;
   private remote: RemotePerson[] = [];
@@ -1172,18 +1176,20 @@ export class Editor {
     this.addElements([el]);
   }
 
-  insertTemplate(id: TemplateId) {
-    let els = buildTemplate(id, this.viewCenter);
-    let b = unionBounds(els.map(boundsOf));
+  /** Move new items to the right of the board's content if they would land on top of it. */
+  private clearOfContent(els: El[]): El[] {
+    const b = unionBounds(els.map(boundsOf));
     const content = unionBounds(this.doc.elements.map(boundsOf));
-    // Don't drop a template on top of existing work: put it to the right instead.
-    if (b && content && this.doc.elements.some((e) => rectsIntersect(boundsOf(e), b as Bounds))) {
-      const dx = content.x + content.w + 160 - b.x;
-      const dy = content.y + content.h / 2 - (b.y + b.h / 2);
-      els = els.map((e) => translateEl(e, dx, dy));
-      b = unionBounds(els.map(boundsOf));
-    }
+    if (!b || !content || !this.doc.elements.some((e) => rectsIntersect(boundsOf(e), b))) return els;
+    const dx = content.x + content.w + 160 - b.x;
+    const dy = content.y + content.h / 2 - (b.y + b.h / 2);
+    return els.map((e) => translateEl(e, dx, dy));
+  }
+
+  insertTemplate(id: TemplateId) {
+    const els = this.clearOfContent(buildTemplate(id, this.viewCenter));
     this.addElements(els);
+    const b = unionBounds(els.map(boundsOf));
     if (b && !rectInside(b, this.viewBounds())) this.zoomToBounds(b, 60, 1);
   }
 
@@ -1205,6 +1211,46 @@ export class Editor {
     } catch (err) {
       this.onError(err instanceof Error ? err.message : 'Could not add that image');
     }
+  }
+
+  /**
+   * Put pictures of PDF pages on the board, arranged as `stack` says, and select them together.
+   * `size` is each page's size in board units. Stops without adding anything if the board has no room.
+   */
+  async insertPages(pages: { src: string; size: { w: number; h: number } }[], stack: StackOptions): Promise<boolean> {
+    if (!pages.length) return false;
+    // The same page picture twice (a repeated page) is stored once.
+    const ids = new Map<string, string>();
+    for (const [id, src] of Object.entries(this.doc.assets)) ids.set(src, id);
+    const fresh: Record<string, string> = {};
+    const assetFor = pages.map((p) => {
+      let id = ids.get(p.src);
+      if (!id) {
+        id = uid();
+        ids.set(p.src, id);
+        fresh[id] = p.src;
+      }
+      return id;
+    });
+    const newBytes = Object.values(fresh).reduce((sum, src) => sum + src.length * 0.75, 0);
+    if (newBytes && !(await this.hasRoomFor(newBytes))) return false;
+    if (Object.keys(fresh).length && this.beforeNewAssets && !(await this.beforeNewAssets(fresh))) return false;
+
+    const { positions, w, h } = layoutPages(pages.map((p) => p.size), stack);
+    const c = this.viewCenter;
+    const els = this.clearOfContent(pages.map((p, i): El => ({
+      type: 'image', id: uid(), x: c.x - w / 2 + positions[i].x, y: c.y - h / 2 + positions[i].y, w: p.size.w, h: p.size.h, asset: assetFor[i],
+    })));
+    Object.assign(this.doc.assets, fresh);
+    this.addElements(els);
+    // Show the whole selected group, so its outline and handles are there to adjust. A long document would
+    // shrink to nothing that way, so it shows just its first page instead; the rest is a pan or zoom away.
+    const all = unionBounds(els.map(boundsOf));
+    if (all && !rectInside(all, this.viewBounds())) {
+      const fit = Math.min((this.width - 160) / all.w, (this.height - 160) / all.h);
+      this.zoomToBounds(fit >= 0.2 ? all : boundsOf(els[0]), 80, 1);
+    }
+    return true;
   }
 
   /** Images that arrived from a shared board's room. */
@@ -2162,6 +2208,12 @@ export class Editor {
     if (this.opts.acceptClipboard && !this.opts.acceptClipboard('paste')) return;
     if (isTypingTarget(document.activeElement) || !e.clipboardData || this.readOnly) return;
     const at = this.pointerOrCenter();
+    const pdfs = [...e.clipboardData.files].filter(isPdfFile);
+    if (pdfs.length && this.onPdf) {
+      e.preventDefault();
+      pdfs.forEach((f) => this.onPdf?.(f));
+      return;
+    }
     const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
     if (files.length) {
       e.preventDefault();
@@ -2203,9 +2255,12 @@ export class Editor {
 
   private onDrop(e: DragEvent) {
     if (this.readOnly) return;
-    const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-    if (!files.length) return;
+    const dropped = [...(e.dataTransfer?.files ?? [])];
+    const pdfs = this.onPdf ? dropped.filter(isPdfFile) : [];
+    const files = dropped.filter((f) => f.type.startsWith('image/'));
+    if (!files.length && !pdfs.length) return;
     e.preventDefault();
+    pdfs.forEach((f) => this.onPdf?.(f));
     const at = this.screenToWorld(this.screenPoint(e));
     files.forEach((f, i) => void this.insertImageFile(f, { x: at.x + i * 30, y: at.y + i * 30 }));
   }

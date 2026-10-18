@@ -7,6 +7,8 @@ import { icon, type IconName } from './icons';
 import { HIGHLIGHT_COLORS, INK_COLORS, NOTE_COLORS, PEN_MAX_SIZE, REACTIONS } from '../palette';
 import { TEMPLATES } from '../templates';
 import { clamp } from '../util';
+import { isPdfFile } from '../pdf';
+import { openPdfImport } from './pdfImport';
 
 const SHAPE_LABELS: Record<ShapeTool, string> = {
   rect: 'Rectangle', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Diamond', line: 'Line', arrow: 'Arrow',
@@ -217,11 +219,15 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
   }
 
   // ------------------------------------------------------------ bottom dock: main tools
-  const imageInput = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+  ed.onPdf = (file) => openPdfImport(ed, file);
+  const imageInput = h('input', { type: 'file', accept: 'image/*,application/pdf,.pdf', multiple: true, hidden: true });
   imageInput.addEventListener('change', () => {
     const c = ed.viewCenter;
-    [...(imageInput.files ?? [])].forEach((f, i) => void ed.insertImageFile(f, { x: c.x + i * 30, y: c.y + i * 30 }));
+    const files = [...(imageInput.files ?? [])];
     imageInput.value = '';
+    // Each PDF gets its own dialog, asking which pages to bring in.
+    files.filter(isPdfFile).forEach((f) => openPdfImport(ed, f));
+    files.filter((f) => !isPdfFile(f)).forEach((f, i) => void ed.insertImageFile(f, { x: c.x + i * 30, y: c.y + i * 30 }));
   });
 
   function shapePopover() {
@@ -268,7 +274,7 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
     ed.insertText();
   });
   const shapeBtn: HTMLButtonElement = iconButton('shapes', 'Shapes (S)', popoverButton(() => shapeBtn, shapePopover, 'above'));
-  const imageBtn = iconButton('image', 'Image', () => {
+  const imageBtn = iconButton('image', 'Image or PDF', () => {
     closePopover();
     imageInput.click();
   });

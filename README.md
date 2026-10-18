@@ -37,6 +37,7 @@ Megahard Whiteboard is an independent, clean-room project inspired by the everyd
 - Text boxes.
 - Shapes: rectangle, ellipse, triangle, diamond, line and arrow. Hold Shift for perfect squares and circles, or to snap line angles.
 - Images: pick a file, paste, or drag and drop. Very large photos are downscaled automatically.
+- PDFs: pick, drag in or paste a PDF to scribble on top of it. Choose which pages to bring in (for example `1-3, 5`), turn any page that came in sideways, and stack the pages top to bottom (the default), left to right, or in a grid with the number of columns you choose. Each page becomes an image on the board, drawn at the image quality set in Settings.
 - Templates: Kanban, Retrospective, SWOT and Brainstorm.
 - Reactions (emoji stamps).
 
