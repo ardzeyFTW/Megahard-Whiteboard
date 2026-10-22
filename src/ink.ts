@@ -1,4 +1,4 @@
-import { getStroke } from 'perfect-freehand';
+import { getStrokeOutlinePoints, getStrokePoints } from 'perfect-freehand';
 import type { Pt, ShapeKind, StrokeEl } from './types';
 import { arrowSize, distToSegment } from './geometry';
 
@@ -11,8 +11,17 @@ const pathCache = new WeakMap<StrokeEl, StrokePaths>();
 
 const avg = (a: number, b: number) => (a + b) / 2;
 
+/** Matches perfect-freehand's internal pressure-change constant. */
+const RATE_OF_PRESSURE_CHANGE = 0.275;
+
+function simPressure(prev: number, distance: number, size: number): number {
+  const sp = Math.min(1, distance / size);
+  const rp = Math.min(1, 1 - sp);
+  return Math.min(1, prev + (rp - prev) * (sp * RATE_OF_PRESSURE_CHANGE));
+}
+
 /** Turn a perfect-freehand outline into a smooth closed SVG path. */
-function outlineToSvg(points: number[][]): string {
+export function outlineToSvg(points: number[][]): string {
   const len = points.length;
   let a = points[0];
   let b = points[1];
@@ -24,6 +33,100 @@ function outlineToSvg(points: number[][]): string {
     d += `${avg(a[0], b[0]).toFixed(2)},${avg(a[1], b[1]).toFixed(2)} `;
   }
   return `${d}Z`;
+}
+
+/**
+ * Compute the outline points for a stroke while stabilizing the tail of fast strokes.
+ *
+ * When a fast curved stroke (such as a quickly written "3") ends, the last few pointer samples
+ * bunch up as the hand stops or lifts off. In perfect-freehand, those closely spaced tail points:
+ *   1. Dump the accumulated streamline lag over a tiny distance, creating a sharp bend/pinch right
+ *      before the end cap; and
+ *   2. Drop step distance below `size`, causing `simulatePressure` to swell the radius back up into
+ *      a round blob at the very tip.
+ */
+export function strokeOutline(el: Pick<StrokeEl, 'points' | 'size' | 'highlighter' | 'simulatePressure'>): number[][] {
+  const p = el.points;
+  const input: number[][] = [];
+  for (let i = 0; i < p.length; i += 3) input.push([p[i], p[i + 1], p[i + 2]]);
+
+  // Coalesce bunched deceleration/lift-off points at the end of a fast sweep so streamline
+  // doesn't dump curve lag into a sharp terminal hook or split the final step into tiny segments.
+  if (input.length >= 3) {
+    let pace = 0;
+    const startIdx = Math.max(1, input.length - 6);
+    for (let i = startIdx; i < input.length - 1; i++) {
+      const d = Math.hypot(input[i][0] - input[i - 1][0], input[i][1] - input[i - 1][1]);
+      if (d > pace) pace = d;
+    }
+    let merged = 0;
+    while (input.length >= 3 && merged < 3) {
+      const n = input.length;
+      const lastSeg = Math.hypot(input[n - 1][0] - input[n - 2][0], input[n - 1][1] - input[n - 2][1]);
+      if (lastSeg >= pace * 0.55) break;
+      const combined = Math.hypot(input[n - 1][0] - input[n - 3][0], input[n - 1][1] - input[n - 3][1]);
+      if (combined <= pace * 1.25) {
+        input.splice(n - 2, 1);
+        merged++;
+      } else {
+        input[n - 2] = [
+          (input[n - 2][0] + avg(input[n - 3][0], input[n - 1][0])) / 2,
+          (input[n - 2][1] + avg(input[n - 3][1], input[n - 1][1])) / 2,
+          input[n - 2][2],
+        ];
+        break;
+      }
+    }
+  }
+
+  const opts = {
+    size: el.size,
+    thinning: el.highlighter ? 0 : 0.5,
+    smoothing: 0.5,
+    streamline: 0.4,
+    simulatePressure: !!el.simulatePressure,
+    last: true,
+  };
+
+  const sp = getStrokePoints(input, opts);
+
+  // Drop interior points within perfect-freehand's 3px end-noise threshold and recompute the
+  // final point's vector and distance relative to the last kept point.
+  if (sp.length >= 3) {
+    const totalLength = sp[sp.length - 1].runningLength;
+    while (sp.length >= 3 && totalLength - sp[sp.length - 2].runningLength < 3) {
+      sp.splice(sp.length - 2, 1);
+    }
+    const last = sp[sp.length - 1];
+    const prev = sp[sp.length - 2];
+    const dx = prev.point[0] - last.point[0];
+    const dy = prev.point[1] - last.point[1];
+    const dist = Math.hypot(dx, dy);
+    if (dist > 0) {
+      last.distance = dist;
+      last.vector = [dx / dist, dy / dist];
+      last.runningLength = prev.runningLength + dist;
+    }
+  }
+
+  // Prevent simulated pressure from swelling into a fat blob when the pointer slows at the tail.
+  if (opts.simulatePressure && sp.length >= 2) {
+    let prevPressure = sp
+      .slice(0, 10)
+      .reduce((acc, curr) => (acc + simPressure(acc, curr.distance, opts.size)) / 2, sp[0].pressure);
+    const totalLength = sp[sp.length - 1].runningLength;
+    const tailZone = Math.max(opts.size * 1.5, sp[Math.max(0, sp.length - 3)].distance * 1.5);
+    for (let i = 0; i < sp.length; i++) {
+      const isTail = i >= sp.length - 2 || totalLength - sp[i].runningLength <= tailZone;
+      if (isTail && i > 0) {
+        const noSwellDist = opts.size * (1 - prevPressure);
+        if (sp[i].distance < noSwellDist) sp[i].distance = noSwellDist;
+      }
+      prevPressure = simPressure(prevPressure, sp[i].distance, opts.size);
+    }
+  }
+
+  return getStrokeOutlinePoints(sp, opts);
 }
 
 export function arrowHeadPath(fromX: number, fromY: number, tipX: number, tipY: number, len: number): Path2D {
@@ -42,16 +145,7 @@ export function strokePaths(el: StrokeEl): StrokePaths {
   if (cached) return cached;
 
   const p = el.points;
-  const input: number[][] = [];
-  for (let i = 0; i < p.length; i += 3) input.push([p[i], p[i + 1], p[i + 2]]);
-  const outline = getStroke(input, {
-    size: el.size,
-    thinning: el.highlighter ? 0 : 0.5,
-    smoothing: 0.5,
-    streamline: 0.4,
-    simulatePressure: !!el.simulatePressure,
-    last: true,
-  });
+  const outline = strokeOutline(el);
 
   let body: Path2D;
   if (outline.length >= 4) {

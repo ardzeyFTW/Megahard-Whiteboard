@@ -239,8 +239,8 @@ type Interaction =
   | { kind: 'rotate'; corner: Corner; frame: SelFrame; start: number; angle: number; originals: El[]; changed: boolean }
   | { kind: 'create'; id: string; start: Pt; el: ShapeEl | LineEl | null };
 
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 2.5;
+const MIN_ZOOM = 0.05;
+const MAX_ZOOM = 3.5;
 const HANDLE_SIZE = 8;
 // Moving the eraser fast grows it, up to this many times its set size.
 const ERASER_MAX_GROWTH = 3;
@@ -1784,16 +1784,9 @@ export class Editor {
     this.state = null;
 
     switch (st.kind) {
-      case 'draw': {
-        // Smoothing trails the pointer a little: end the stroke exactly where it stopped.
-        const n = st.raw.length;
-        if (!st.straight && n >= 6 && (st.raw[n - 3] !== st.last.x || st.raw[n - 2] !== st.last.y)) {
-          st.raw.push(st.last.x, st.last.y, st.raw[n - 1]);
-          st.el = { ...st.el, points: st.raw };
-        }
+      case 'draw':
         this.finishStroke(st.el);
         break;
-      }
       case 'erase':
         if (st.erased) this.commit();
         break;

@@ -131,7 +131,7 @@ export function sanitizeBoard(raw: unknown): BoardDoc | null {
   };
   const cam = (r.camera ?? {}) as Record<string, unknown>;
   const camera: Camera =
-    num(cam.x) && num(cam.y) && num(cam.zoom) ? { x: cam.x, y: cam.y, zoom: clamp(cam.zoom, 0.1, 8) } : { x: 0, y: 0, zoom: 1 };
+    num(cam.x) && num(cam.y) && num(cam.zoom) ? { x: cam.x, y: cam.y, zoom: clamp(cam.zoom, 0.05, 3.5) } : { x: 0, y: 0, zoom: 1 };
   const now = Date.now();
   const assets = sanitizeAssets(r.assets);
   const elements = sanitizeElements(r.elements).filter((e) => e.type !== 'image' || e.asset in assets);
