@@ -81,4 +81,41 @@ describe('strokeOutline', () => {
     // The tip before the end cap should not bulge wider than the preceding fast sweep.
     expect(tipSpan).toBeLessThanOrEqual(neckSpan + 0.15);
   });
+
+  it('does not swell up at the start when drawing very slowly with a small pen size', () => {
+    for (const size of [1, 2]) {
+      const points = [0, 0, 0.5];
+      for (let step = 1; step <= 10; step++) {
+        const raw = { x: step * 0.8, y: 0 };
+        const prev = { x: points[points.length - 3], y: points[points.length - 2] };
+        const f = filterPoint(prev, raw, 1);
+        points.push(f.x, f.y, 0.5);
+
+        const outline = strokeOutline({ points, size, simulatePressure: true });
+        const minY = Math.min(...outline.map((p) => p[1]));
+        const maxY = Math.max(...outline.map((p) => p[1]));
+        const height = maxY - minY;
+
+        // Height should stay close to the pen size, never ballooning to 2x–3x size while length < 3.
+        expect(height).toBeGreaterThan(size * 0.9);
+        expect(height).toBeLessThan(size * 1.15);
+      }
+    }
+  });
+
+  it('keeps tight curves stable in real time as new points are added', () => {
+    const allPoints: number[] = [];
+    for (let i = 0; i <= 16; i++) {
+      const a = i * 0.4;
+      allPoints.push(20 + 4 * Math.cos(a), 20 + 4 * Math.sin(a), 0.5);
+    }
+    const early = strokeOutline({ points: allPoints.slice(0, 6 * 3), size: 1.5, simulatePressure: true });
+    const later = strokeOutline({ points: allPoints, size: 1.5, simulatePressure: true });
+
+    // The first several left-side outline points of the tight curve must not jump when later points arrive.
+    for (let i = 0; i < 4; i++) {
+      expect(later[i][0]).toBeCloseTo(early[i][0], 5);
+      expect(later[i][1]).toBeCloseTo(early[i][1], 5);
+    }
+  });
 });
