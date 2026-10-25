@@ -1,6 +1,6 @@
 {
   "name": "megahard-whiteboard",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A local-first whiteboard. Your boards stay on your device, and you can share them live.",
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
@@ -27,6 +27,11 @@
   "build": {
     "appId": "com.megahard.whiteboard",
     "productName": "Megahard Whiteboard",
+    "publish": {
+      "provider": "github",
+      "owner": "ardzeyFTW",
+      "repo": "Megahard-Whiteboard"
+    },
     "directories": {
       "output": "dist-electron"
     },
@@ -59,6 +64,7 @@
     }
   },
   "dependencies": {
+    "electron-updater": "^6.3.9",
     "fractional-indexing": "^4.0.0",
     "lib0": "^0.2.119",
     "pdfjs-dist": "^6.4.299",

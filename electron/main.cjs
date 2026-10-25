@@ -1,4 +1,5 @@
 const { app, BrowserWindow, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 
 let mainWindow = null;
@@ -62,7 +63,12 @@ if (!gotTheLock) {
     }
   });
 
-  app.whenReady().then(createWindow);
+  app.whenReady().then(() => {
+    createWindow();
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+    }
+  });
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
