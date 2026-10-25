@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.1.2';
+export const APP_VERSION = '0.1.3';
 export const GITHUB_REPO = 'ardzeyFTW/Megahard-Whiteboard';
 export const RELEASES_PAGE = `https://github.com/${GITHUB_REPO}/releases`;
 export const LATEST_RELEASE_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;

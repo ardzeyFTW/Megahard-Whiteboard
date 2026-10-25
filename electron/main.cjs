@@ -1,8 +1,56 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 
 let mainWindow = null;
+
+// Configure autoUpdater
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+function sendUpdaterStatus(type, data = {}) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('updater:status', { type, ...data });
+  }
+}
+
+autoUpdater.on('checking-for-update', () => {
+  sendUpdaterStatus('checking');
+});
+
+autoUpdater.on('update-available', (info) => {
+  sendUpdaterStatus('available', { version: info.version });
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  sendUpdaterStatus('progress', {
+    percent: Math.round(progressObj.percent),
+    transferred: progressObj.transferred,
+    total: progressObj.total,
+  });
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  sendUpdaterStatus('downloaded', { version: info.version });
+});
+
+autoUpdater.on('error', (err) => {
+  sendUpdaterStatus('error', { message: err?.message || 'Update check failed' });
+});
+
+ipcMain.handle('updater:check', async () => {
+  if (!app.isPackaged) return { inDev: true };
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { updateInfo: result?.updateInfo };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('updater:install', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
 
 function getIconPath() {
   if (process.platform === 'win32') {
@@ -24,7 +72,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
@@ -66,7 +114,9 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     createWindow();
     if (app.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+      setTimeout(() => {
+        autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+      }, 2000);
     }
   });
 

@@ -1,6 +1,6 @@
 {
   "name": "megahard-whiteboard",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A local-first whiteboard. Your boards stay on your device, and you can share them live.",
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {

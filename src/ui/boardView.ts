@@ -16,8 +16,25 @@ import { myServer } from '../sync/config';
 import { boardAlmostFull, boardFull, storageFull } from './limitDialogs';
 import { setupCollab, type Collab, type CollabOptions } from './collab';
 import { saveGuestCache, saveYState } from '../db';
-import { APP_VERSION, checkUpdate, isElectron, type UpdateInfo } from '../version';
+import { APP_VERSION, checkUpdate, isElectron, isNewerVersion, type UpdateInfo } from '../version';
 import { showDownloadModal } from './downloadModal';
+
+interface DesktopUpdaterStatus {
+  type: 'checking' | 'available' | 'progress' | 'downloaded' | 'error';
+  version?: string;
+  percent?: number;
+  message?: string;
+}
+
+declare global {
+  interface Window {
+    desktopUpdater?: {
+      checkForUpdates: () => Promise<any>;
+      quitAndInstall: () => Promise<void>;
+      onStatusChange: (callback: (status: DesktopUpdaterStatus) => void) => () => void;
+    };
+  }
+}
 
 // Shortcuts that can't be changed. Tool keys are configurable in Settings.
 const FIXED_SHORTCUTS: [string, string][] = [
@@ -124,6 +141,7 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
     h('button', { class: 'menu-item', type: 'button', onclick: () => { closePopover(); run(); } }, icon(name), label);
 
   let availableUpdate: UpdateInfo | null = null;
+  let updaterStatus: DesktopUpdaterStatus | null = null;
 
   // Guests can't change the owner's background, or save or export the board: only the owner keeps it.
   const menuBtn: HTMLButtonElement = iconButton('more', 'Menu', popoverButton(() => menuBtn, () =>
@@ -148,9 +166,29 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
           class: 'menu-item menu-update-item',
           type: 'button',
           onclick: () => { closePopover(); showUpdateModal(availableUpdate!); },
-        }, icon('sparkle'), `Update: v${availableUpdate.latestVersion} available`),
+        }, icon('sparkle'), updaterStatus?.type === 'downloaded'
+          ? `Update ready — restart (v${availableUpdate.latestVersion})`
+          : `Update: v${availableUpdate.latestVersion} available`),
       ] : []),
       h('div', { class: 'menu-version-footer' }, `Megahard Whiteboard v${APP_VERSION}`)), 'below-end'));
+
+  if (window.desktopUpdater) {
+    window.desktopUpdater.onStatusChange((status) => {
+      updaterStatus = status;
+      if (status.type === 'available' || status.type === 'downloaded') {
+        availableUpdate = {
+          available: true,
+          currentVersion: APP_VERSION,
+          latestVersion: status.version || availableUpdate?.latestVersion || '',
+          url: '',
+        };
+        menuBtn.classList.add('has-update');
+        if (status.type === 'downloaded') {
+          toast(`Update v${status.version} is ready! Click the menu to restart.`, 8000);
+        }
+      }
+    });
+  }
 
   void checkUpdate().then((info) => {
     if (info?.available) {
@@ -326,6 +364,20 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
       onclick: async () => {
         checkBtn.disabled = true;
         statusP.textContent = 'Checking for updates...';
+        if (window.desktopUpdater) {
+          try {
+            const checkRes = await window.desktopUpdater.checkForUpdates();
+            const newVer = checkRes?.updateInfo?.version;
+            if (newVer && isNewerVersion(newVer, APP_VERSION)) {
+              checkBtn.disabled = false;
+              statusP.replaceChildren(
+                h('strong', {}, `Update v${newVer} found! `),
+                h('span', {}, 'Downloading silently in background...'),
+              );
+              return;
+            }
+          } catch {}
+        }
         const res = await checkUpdate(true);
         checkBtn.disabled = false;
         if (res?.available) {
@@ -333,7 +385,7 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
           menuBtn.classList.add('has-update');
           statusP.replaceChildren(
             h('strong', {}, `Update available: v${res.latestVersion} `),
-            h('a', { href: res.url, target: '_blank', rel: 'noopener' }, 'View release on GitHub'),
+            h('a', { href: res.url, target: '_blank', rel: 'noopener' }, 'View details'),
           );
         } else {
           statusP.textContent = `You're on the latest version (v${APP_VERSION}).`;
@@ -362,12 +414,41 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
   const showDownloadAppModal = () => showDownloadModal(availableUpdate?.latestVersion || APP_VERSION);
 
   function showUpdateModal(update: UpdateInfo) {
-    showModal(`Update Available: v${update.latestVersion}`, h('div', { class: 'about' },
-      h('p', {}, `A newer version of Megahard Whiteboard is available (current: v${APP_VERSION}, latest: v${update.latestVersion}).`),
+    const isDownloaded = updaterStatus?.type === 'downloaded';
+    const isDownloading = updaterStatus?.type === 'progress';
+
+    const actionButton = window.desktopUpdater
+      ? isDownloaded
+        ? h('button', {
+            class: 'btn btn-primary',
+            type: 'button',
+            onclick: () => { window.desktopUpdater?.quitAndInstall(); },
+          }, icon('sparkle'), 'Restart & Install Update')
+        : isDownloading
+          ? h('div', { class: 'muted', style: 'font-weight: 600; padding: 6px 0;' },
+              `Downloading update: ${updaterStatus?.percent ?? 0}%...`)
+          : h('button', {
+              class: 'btn btn-primary',
+              type: 'button',
+              onclick: () => {
+                window.desktopUpdater?.checkForUpdates();
+                toast('Downloading update in the background...', 4000);
+                closeAllModals();
+              },
+            }, icon('sparkle'), 'Download and Install Update')
+      : h('a', {
+          class: 'btn btn-primary',
+          href: update.url,
+          target: '_blank',
+          rel: 'noopener',
+        }, icon('sparkle'), `Download v${update.latestVersion} on GitHub`);
+
+    showModal(`Update: v${update.latestVersion}`, h('div', { class: 'about' },
+      h('p', {}, isDownloaded
+        ? `Update v${update.latestVersion} has been downloaded and is ready to apply. Click below to restart and finish updating.`
+        : `A newer version of Megahard Whiteboard is available (current: v${APP_VERSION}, latest: v${update.latestVersion}).`),
       update.body ? h('pre', { class: 'release-notes' }, update.body) : '',
-      h('div', { class: 'modal-actions', style: 'padding: 14px 0 0;' },
-        h('a', { class: 'btn btn-primary', href: update.url, target: '_blank', rel: 'noopener' }, icon('sparkle'), `Download v${update.latestVersion} on GitHub`),
-      ),
+      h('div', { class: 'modal-actions', style: 'padding: 14px 0 0;' }, actionButton),
     ));
   }
 
