@@ -3,6 +3,13 @@ const path = require('node:path');
 
 let mainWindow = null;
 
+function getIconPath() {
+  if (process.platform === 'win32') {
+    return path.join(__dirname, '../build/icon.ico');
+  }
+  return path.join(__dirname, '../build/icon.png');
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -10,7 +17,7 @@ function createWindow() {
     minWidth: 700,
     minHeight: 500,
     title: 'Megahard Whiteboard',
-    icon: path.join(__dirname, '../public/icon.svg'),
+    icon: getIconPath(),
     autoHideMenuBar: true,
     backgroundColor: '#f4f5f7',
     webPreferences: {

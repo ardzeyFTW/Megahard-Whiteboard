@@ -1,9 +1,15 @@
 import { LIMITS, type Usage } from '../limits';
+import { isElectron } from '../version';
 import { formatBytes } from '../util';
 import { h, showModal, textButton } from './dom';
 
 /** A bar showing how much of the storage budget and board limit is used. */
 export function usageMeter(u: Usage): HTMLElement {
+  if (isElectron) {
+    return h('div', { class: 'usage' },
+      h('div', { class: 'usage-text' },
+        `${formatBytes(u.bytes)} used · ${u.boards} ${u.boards === 1 ? 'board' : 'boards'}`));
+  }
   const share = Math.max(u.bytes / u.budget, u.boards / LIMITS.maxBoards);
   const pct = Math.min(100, share * 100);
   const level = share >= 1 ? ' full' : share >= LIMITS.warnAt ? ' warn' : '';

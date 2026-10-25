@@ -1,6 +1,6 @@
 {
   "name": "megahard-whiteboard",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A local-first whiteboard. Your boards stay on your device, and you can share them live.",
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
@@ -33,10 +33,13 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "public/icon.svg",
+      "build/icon.ico",
+      "build/icon.png",
+      "public/**/*",
       "package.json"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",

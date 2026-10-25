@@ -9,6 +9,7 @@ import { h, iconButton, segmented, showModal, sep, textButton, toast } from './d
 import { boardLimitReached, boardFull, boardAlmostFull, storageFull } from './limitDialogs';
 import { listBoards, listShares, loadBoard, loadGuestNotes, saveGuestNotes } from '../db';
 import { getUsage, LIMITS } from '../limits';
+import { isElectron } from '../version';
 import { referencedAssets } from '../model';
 import { defaultBackground, readPrefs, writePrefs } from '../prefs';
 import { uid } from '../util';
@@ -361,7 +362,7 @@ export class ViewerBoard {
     if (!pane) return;
     let kept = !isNew;
     let canKeep = true;
-    if (isNew) {
+    if (isNew && !isElectron) {
       const usage = await getUsage().catch(() => null);
       if (usage && usage.boards >= LIMITS.maxBoards) {
         canKeep = false;

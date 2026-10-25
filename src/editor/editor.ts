@@ -20,6 +20,7 @@ import { layoutPages, type StackOptions } from '../pdfLayout';
 import { HIGHLIGHT_COLORS, NOTE_COLORS, PEN_MAX_SIZE } from '../palette';
 import { readPrefs, writePrefs } from '../prefs';
 import { LIMITS, getUsage, type Usage } from '../limits';
+import { isElectron } from '../version';
 import { estimateDocBytes } from '../storageFormat';
 
 export type LimitEvent =
@@ -1278,8 +1279,8 @@ export class Editor {
 
   /** Check the board and overall storage limits before adding this many bytes. */
   private async hasRoomFor(extraBytes: number): Promise<boolean> {
-    // A guest stores nothing here; the shared room has its own limit.
-    if (this.opts.guest) return true;
+    // A guest stores nothing here; desktop app has no artificial storage limits.
+    if (this.opts.guest || isElectron) return true;
     if (estimateDocBytes(this.doc) + extraBytes > LIMITS.perBoard) {
       this.onLimit({ kind: 'boardFull' });
       return false;

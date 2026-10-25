@@ -141,6 +141,7 @@ export async function mountHome(root: HTMLElement): Promise<() => void> {
 
   /** Check the board and storage limits before adding boards, showing a pop-up if they'd be exceeded. */
   async function canAdd(boards: number, bytes: number, usage?: Usage): Promise<boolean> {
+    if (isElectron) return true;
     const u = usage ?? (await getUsage());
     if (u.boards + boards > LIMITS.maxBoards) {
       boardLimitReached(u);
@@ -196,9 +197,11 @@ export async function mountHome(root: HTMLElement): Promise<() => void> {
 
   async function updateStorage() {
     const [usage, info] = await Promise.all([getUsage(), storageInfo()]);
-    const note = info.persisted
-      ? 'Saved on this device only.'
-      : 'Saved on this device only. Your browser may clear it if your disk runs low, so back up boards that matter.';
+    const note = isElectron
+      ? 'Stored permanently on this PC.'
+      : info.persisted
+        ? 'Saved on this device only.'
+        : 'Saved on this device only. Your browser may clear it if your disk runs low, so back up boards that matter.';
     storageLine.replaceChildren(
       usageMeter(usage),
       h('p', {}, note),
@@ -229,14 +232,16 @@ export async function mountHome(root: HTMLElement): Promise<() => void> {
     if (changed) void refresh();
   });
 
-  // Warn once per visit when close to a limit.
-  const usage = await getUsage();
-  const nearlyFull = usage.bytes >= usage.budget * LIMITS.warnAt || usage.boards >= LIMITS.maxBoards * LIMITS.warnAt;
-  if (nearlyFull && !sessionStorage.getItem('megahard:warned')) {
-    sessionStorage.setItem('megahard:warned', '1');
-    if (usage.boards >= LIMITS.maxBoards) boardLimitReached(usage);
-    else if (usage.bytes >= usage.budget) storageFull(usage);
-    else storageAlmostFull(usage);
+  // Warn once per visit when close to a limit (browser only; desktop has no limits).
+  if (!isElectron) {
+    const usage = await getUsage();
+    const nearlyFull = usage.bytes >= usage.budget * LIMITS.warnAt || usage.boards >= LIMITS.maxBoards * LIMITS.warnAt;
+    if (nearlyFull && !sessionStorage.getItem('megahard:warned')) {
+      sessionStorage.setItem('megahard:warned', '1');
+      if (usage.boards >= LIMITS.maxBoards) boardLimitReached(usage);
+      else if (usage.bytes >= usage.budget) storageFull(usage);
+      else storageAlmostFull(usage);
+    }
   }
   return () => {
     closePopover();
