@@ -86,10 +86,13 @@ function result<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
+export const sortRecent = <T extends { updatedAt: number; createdAt: number; name: string }>(items: T[]): T[] =>
+  items.sort((a, b) => (b.updatedAt - a.updatedAt) || (b.createdAt - a.createdAt) || a.name.localeCompare(b.name));
+
 export async function listBoards(): Promise<BoardMeta[]> {
   const db = await openDb();
   const all = await result(db.transaction(META).objectStore(META).getAll() as IDBRequest<BoardMeta[]>);
-  return all.sort((a, b) => b.updatedAt - a.updatedAt);
+  return sortRecent(all);
 }
 
 export async function loadBoard(id: string): Promise<BoardDoc | undefined> {
@@ -101,7 +104,8 @@ export async function loadBoard(id: string): Promise<BoardDoc | undefined> {
 export async function loadAllBoards(): Promise<BoardDoc[]> {
   const db = await openDb();
   const all = await result(db.transaction(BOARDS).objectStore(BOARDS).getAll() as IDBRequest<StoredDoc[]>);
-  return Promise.all(all.map(unpackDoc));
+  const docs = await Promise.all(all.map(unpackDoc));
+  return sortRecent(docs);
 }
 
 /**

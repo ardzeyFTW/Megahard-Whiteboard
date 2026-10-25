@@ -41,12 +41,15 @@ export async function parseImport(file: File): Promise<BoardDoc[]> {
   } catch {
     throw new Error(`${file.name} is not a Megahard Whiteboard file`);
   }
-  const d = data as { format?: string; board?: unknown; boards?: unknown } | null;
+  const d = data as { format?: string; board?: unknown; boards?: unknown; exportedAt?: string } | null;
   let raws: unknown[] = [];
   if (d?.format === 'megahard-whiteboard') raws = [d.board];
   else if (d?.format === 'megahard-whiteboard-backup' && Array.isArray(d.boards)) raws = d.boards;
   else throw new Error(`${file.name} is not a Megahard Whiteboard file`);
-  return raws.map(sanitizeBoard).filter((b): b is BoardDoc => b !== null);
+  const fileTime = typeof file.lastModified === 'number' && Number.isFinite(file.lastModified) && file.lastModified > 0
+    ? file.lastModified
+    : (typeof d?.exportedAt === 'string' && Number.isFinite(Date.parse(d.exportedAt)) ? Date.parse(d.exportedAt) : Date.now());
+  return raws.map((r, i) => sanitizeBoard(r, fileTime - i)).filter((b): b is BoardDoc => b !== null);
 }
 
 /** Save a file, using the native save dialog where the browser supports it. */

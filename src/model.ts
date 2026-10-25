@@ -33,6 +33,14 @@ export function createText(x: number, y: number, text: string, opts: { fontSize?
 
 const SHAPE_KINDS: ShapeKind[] = ['rect', 'ellipse', 'triangle', 'diamond'];
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const parseTime = (v: unknown, fallback: number): number => {
+  if (num(v) && v > 0) return v;
+  if (typeof v === 'string') {
+    const parsed = Date.parse(v);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return fallback;
+};
 const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
 const color = (v: unknown, fallback: string) =>
   typeof v === 'string' && /^(#[0-9a-fA-F]{3,8}|transparent)$/.test(v) ? v : fallback;
@@ -121,7 +129,7 @@ export function sanitizeAssets(raw: unknown): Record<string, string> {
 }
 
 /** Validate an imported board. Always gets a fresh id so it never overwrites an existing board. */
-export function sanitizeBoard(raw: unknown): BoardDoc | null {
+export function sanitizeBoard(raw: unknown, fallbackTime?: number): BoardDoc | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const bg = (r.background ?? {}) as Record<string, unknown>;
@@ -132,15 +140,17 @@ export function sanitizeBoard(raw: unknown): BoardDoc | null {
   const cam = (r.camera ?? {}) as Record<string, unknown>;
   const camera: Camera =
     num(cam.x) && num(cam.y) && num(cam.zoom) ? { x: cam.x, y: cam.y, zoom: clamp(cam.zoom, 0.05, 3.5) } : { x: 0, y: 0, zoom: 1 };
-  const now = Date.now();
+  const now = fallbackTime && Number.isFinite(fallbackTime) ? fallbackTime : Date.now();
+  const updatedAt = parseTime(r.updatedAt, parseTime(r.createdAt, now));
+  const createdAt = parseTime(r.createdAt, updatedAt);
   const assets = sanitizeAssets(r.assets);
   const elements = sanitizeElements(r.elements).filter((e) => e.type !== 'image' || e.asset in assets);
   return {
     version: 1,
     id: uid(),
     name: str(r.name, 200) && r.name.trim() ? r.name.trim() : 'Imported board',
-    createdAt: num(r.createdAt) ? r.createdAt : now,
-    updatedAt: now,
+    createdAt,
+    updatedAt,
     background,
     elements,
     assets,
