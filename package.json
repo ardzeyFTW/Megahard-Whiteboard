@@ -10,6 +10,7 @@
   "homepage": "https://ardzeyftw.github.io/Megahard-Whiteboard/",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "start": "vite --open",
     "dev": "vite",
@@ -18,7 +19,50 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --dir src",
     "dev:server": "npm --prefix server run dev",
-    "test:server": "npm --prefix server test"
+    "test:server": "npm --prefix server test",
+    "electron:start": "electron electron/main.cjs",
+    "electron:build": "npm run build && electron-builder --win",
+    "build:exe": "npm run electron:build"
+  },
+  "build": {
+    "appId": "com.megahard.whiteboard",
+    "productName": "Megahard Whiteboard",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "public/icon.svg",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Megahard Whiteboard",
+      "artifactName": "Megahard-Whiteboard-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Megahard-Whiteboard-${version}-portable.${ext}"
+    }
   },
   "dependencies": {
     "fractional-indexing": "^4.0.0",
@@ -29,6 +73,8 @@
     "yjs": "^13.6.33"
   },
   "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.3"

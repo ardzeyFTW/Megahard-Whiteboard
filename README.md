@@ -2,7 +2,7 @@
 
 A whiteboard that keeps your boards **on your own device**. There are no accounts and no tracking, it works offline, and you can share a board to draw on it live with others.
 
-**[Use Megahard Whiteboard in your browser →](https://ardzeyftw.github.io/Megahard-Whiteboard/app/)** · [Website](https://ardzeyftw.github.io/Megahard-Whiteboard/)
+**[Use Megahard Whiteboard in your browser →](https://ardzeyftw.github.io/Megahard-Whiteboard/app/)** · **[Download for Windows (.exe) →](https://github.com/ardzeyFTW/Megahard-Whiteboard/releases/latest)** · [Website](https://ardzeyftw.github.io/Megahard-Whiteboard/)
 
 ![A Kanban board with sticky notes, a hand-drawn circle and arrow, a highlighter stroke and an emoji reaction](docs/images/board-kanban.jpg)
 

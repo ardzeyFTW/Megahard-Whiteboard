@@ -16,6 +16,7 @@ import { myServer } from '../sync/config';
 import { boardAlmostFull, boardFull, storageFull } from './limitDialogs';
 import { setupCollab, type Collab, type CollabOptions } from './collab';
 import { saveGuestCache, saveYState } from '../db';
+import { APP_VERSION, checkUpdate, type UpdateInfo } from '../version';
 
 // Shortcuts that can't be changed. Tool keys are configurable in Settings.
 const FIXED_SHORTCUTS: [string, string][] = [
@@ -121,6 +122,8 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
   const menuItem = (name: IconName, label: string, run: () => void) =>
     h('button', { class: 'menu-item', type: 'button', onclick: () => { closePopover(); run(); } }, icon(name), label);
 
+  let availableUpdate: UpdateInfo | null = null;
+
   // Guests can't change the owner's background, or save or export the board: only the owner keeps it.
   const menuBtn: HTMLButtonElement = iconButton('more', 'Menu', popoverButton(() => menuBtn, () =>
     h('div', { class: 'pop-section menu' },
@@ -134,7 +137,23 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
       ]),
       menuItem('fit', 'Zoom to fit', () => ed.zoomToFit()),
       menuItem('settings', 'Settings', showSettings),
-      menuItem('info', 'About Megahard Whiteboard', showAbout)), 'below-end'));
+      menuItem('info', 'About Megahard Whiteboard', showAbout),
+      ...(availableUpdate?.available ? [
+        h('hr'),
+        h('button', {
+          class: 'menu-item menu-update-item',
+          type: 'button',
+          onclick: () => { closePopover(); showUpdateModal(availableUpdate!); },
+        }, icon('sparkle'), `Update: v${availableUpdate.latestVersion} available`),
+      ] : []),
+      h('div', { class: 'menu-version-footer' }, `Megahard Whiteboard v${APP_VERSION}`)), 'below-end'));
+
+  void checkUpdate().then((info) => {
+    if (info?.available) {
+      availableUpdate = info;
+      menuBtn.classList.add('has-update');
+    }
+  });
   // Viewers: follow the owner's view, and open a board of their own beside the shared one (only if they want to).
   let followNoticeShown = false;
   // The zoom buttons are hidden on screens this narrow (see styles.css), except beside a viewer's own board.
@@ -296,11 +315,45 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
   }
 
   function showAbout() {
+    const statusP = h('p', { class: 'update-status' });
+    const checkBtn = h('button', {
+      class: 'btn btn-secondary',
+      type: 'button',
+      onclick: async () => {
+        checkBtn.disabled = true;
+        statusP.textContent = 'Checking for updates...';
+        const res = await checkUpdate(true);
+        checkBtn.disabled = false;
+        if (res?.available) {
+          availableUpdate = res;
+          menuBtn.classList.add('has-update');
+          statusP.replaceChildren(
+            h('strong', {}, `Update available: v${res.latestVersion} `),
+            h('a', { href: res.url, target: '_blank', rel: 'noopener' }, 'View release on GitHub'),
+          );
+        } else {
+          statusP.textContent = `You're on the latest version (v${APP_VERSION}).`;
+        }
+      },
+    }, 'Check for updates');
+
     showModal('About Megahard Whiteboard', h('div', { class: 'about' },
-      h('p', {}, 'Megahard Whiteboard is a whiteboard that keeps your data with you. Your boards are stored in this browser on this device. Nothing is uploaded unless you share a board: then your own sharing server (a free Cloudflare account that you set up) keeps a copy while it’s shared, and deletes it at most 7 days after.'),
+      h('div', { class: 'about-version' }, `Version ${APP_VERSION}`),
+      h('p', {}, 'Megahard Whiteboard is a whiteboard that keeps your data with you. Your boards are stored on this device. Nothing is uploaded unless you share a board: then your own sharing server (a free Cloudflare account that you set up) keeps a copy while it’s shared, and deletes it at most 7 days after.'),
       h('p', {}, 'When you join someone’s board as a viewer, you get a board of your own beside it to write on. It stays on your device, and you can copy things from theirs into it.'),
       h('p', {}, `To move boards between devices or keep a backup, use "Save board file" here or "Back up all" on the home screen, then import the ${FILE_EXT} file wherever you need it.`),
+      h('div', { class: 'about-update-section' }, checkBtn, statusP),
       h('p', { class: 'muted' }, 'Megahard Whiteboard is an independent project. It is not affiliated with or endorsed by Microsoft.')));
+  }
+
+  function showUpdateModal(update: UpdateInfo) {
+    showModal(`Update Available: v${update.latestVersion}`, h('div', { class: 'about' },
+      h('p', {}, `A newer version of Megahard Whiteboard is available (current: v${APP_VERSION}, latest: v${update.latestVersion}).`),
+      update.body ? h('pre', { class: 'release-notes' }, update.body) : '',
+      h('div', { class: 'modal-actions', style: 'padding: 14px 0 0;' },
+        h('a', { class: 'btn btn-primary', href: update.url, target: '_blank', rel: 'noopener' }, icon('sparkle'), `Download v${update.latestVersion} on GitHub`),
+      ),
+    ));
   }
 
   const onKey = (e: KeyboardEvent) => {
