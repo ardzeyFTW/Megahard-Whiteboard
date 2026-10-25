@@ -184,6 +184,10 @@ The only runtime dependency is [perfect-freehand](https://github.com/steveruizok
 
 Issues and pull requests are welcome. Please keep the app local-first: no network calls, analytics or required accounts. Run `npm run build` before opening a PR; it includes the type check. By sending a pull request you agree that your contribution is licensed under the same terms as the rest of the project (see below).
 
+## Releases
+
+For step-by-step instructions on publishing new releases and building the Windows `.exe` desktop installers, see [docs/releasing.md](docs/releasing.md).
+
 ## License
 
 Megahard Whiteboard is source-available, not open source. It is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). You can use, read, change and share it for any noncommercial purpose, including personal use, hobby projects, education and charities. You can't use it commercially, and that includes selling it. If you want to use it commercially, ask first.

@@ -22,7 +22,8 @@
     "test:server": "npm --prefix server test",
     "electron:start": "electron electron/main.cjs",
     "electron:build": "npm run build && electron-builder --win",
-    "build:exe": "npm run electron:build"
+    "build:exe": "npm run electron:build",
+    "release": "node scripts/release.cjs"
   },
   "build": {
     "appId": "com.megahard.whiteboard",
