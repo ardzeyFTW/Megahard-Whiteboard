@@ -1,6 +1,6 @@
 import { h, showModal } from './dom';
 import { icon } from './icons';
-import { APP_VERSION, RELEASES_PAGE, getInstallerUrl, getPortableUrl } from '../version';
+import { APP_VERSION, RELEASES_PAGE, getInstallerUrl } from '../version';
 
 export function showDownloadModal(latestVersion = APP_VERSION) {
   showModal('Download Megahard Whiteboard', h('div', { class: 'about' },
@@ -17,21 +17,14 @@ export function showDownloadModal(latestVersion = APP_VERSION) {
         href: getInstallerUrl(latestVersion),
         target: '_blank',
         rel: 'noopener',
-      }, icon('download'), `Download Installer v${latestVersion} (.exe)`),
-      h('a', {
-        class: 'btn btn-secondary',
-        style: 'justify-content: center;',
-        href: getPortableUrl(latestVersion),
-        target: '_blank',
-        rel: 'noopener',
-      }, icon('file'), `Download Portable v${latestVersion} (.exe)`),
+      }, icon('download'), `Download for Windows (.exe)`),
       h('a', {
         class: 'muted',
         style: 'text-align: center; font-size: 13px; margin-top: 4px;',
         href: RELEASES_PAGE,
         target: '_blank',
         rel: 'noopener',
-      }, 'View all releases on GitHub →'),
+      }, 'View release on GitHub →'),
     ),
   ));
 }

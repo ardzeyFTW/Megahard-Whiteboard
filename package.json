@@ -46,12 +46,6 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
         }
       ]
     },
@@ -62,9 +56,6 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Megahard Whiteboard",
       "artifactName": "Megahard-Whiteboard-Setup-${version}.${ext}"
-    },
-    "portable": {
-      "artifactName": "Megahard-Whiteboard-${version}-portable.${ext}"
     }
   },
   "dependencies": {

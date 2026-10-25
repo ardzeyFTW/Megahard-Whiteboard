@@ -86,7 +86,3 @@ export const isElectron = typeof navigator !== 'undefined' && /electron/i.test(n
 export function getInstallerUrl(version = APP_VERSION): string {
   return `https://github.com/${GITHUB_REPO}/releases/download/v${version}/Megahard-Whiteboard-Setup-${version}.exe`;
 }
-
-export function getPortableUrl(version = APP_VERSION): string {
-  return `https://github.com/${GITHUB_REPO}/releases/download/v${version}/Megahard-Whiteboard-${version}-portable.exe`;
-}
