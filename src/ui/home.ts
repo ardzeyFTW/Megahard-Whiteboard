@@ -13,6 +13,8 @@ import { makeThumbnail } from '../render';
 import { relativeTime, safeFileName } from '../util';
 import { closePopover, confirmDialog, h, iconButton, openPopover, textButton, toast } from './dom';
 import { LOGO_SVG, icon, type IconName } from './icons';
+import { isElectron } from '../version';
+import { showDownloadModal } from './downloadModal';
 
 export async function mountHome(root: HTMLElement): Promise<() => void> {
   let metas: BoardMeta[] = [];
@@ -42,6 +44,7 @@ export async function mountHome(root: HTMLElement): Promise<() => void> {
         h('h1', {}, 'Megahard Whiteboard')),
       h('div', { class: 'home-actions' },
         h('label', { class: 'search-wrap' }, icon('search'), search),
+        ...(!isElectron ? [textButton('Desktop App', () => showDownloadModal(), 'btn', 'desktop')] : []),
         textButton('Import', () => fileInput.click(), 'btn', 'upload'),
         textButton('Back up all', () => void backupAll(), 'btn', 'download'))),
     h('main', { class: 'home-main' }, h('h2', {}, 'Your boards'), grid, storageLine),
@@ -196,7 +199,21 @@ export async function mountHome(root: HTMLElement): Promise<() => void> {
     const note = info.persisted
       ? 'Saved on this device only.'
       : 'Saved on this device only. Your browser may clear it if your disk runs low, so back up boards that matter.';
-    storageLine.replaceChildren(usageMeter(usage), h('p', {}, note));
+    storageLine.replaceChildren(
+      usageMeter(usage),
+      h('p', {}, note),
+      ...(!isElectron ? [
+        h('p', { class: 'muted', style: 'font-size: 13px; margin-top: 4px;' },
+          'Tip: To keep your boards immune to browser cache cleanups, ',
+          h('button', {
+            type: 'button',
+            style: 'background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit;',
+            onclick: () => showDownloadModal(),
+          }, 'download the standalone app (.exe)'),
+          '.',
+        ),
+      ] : []),
+    );
     return usage;
   }
 

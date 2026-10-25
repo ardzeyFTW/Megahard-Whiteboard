@@ -1,7 +1,7 @@
 import type { BoardDoc, Pattern } from '../types';
 import { Editor, KEY_ACTIONS, RESERVED_KEYS, keyLabel, normalizeKey, type KeyAction } from '../editor/editor';
 import {
-  closePopover, h, iconButton, segmented, sep, showModal, swatchRow, textButton, toast, togglePopover, type Placement,
+  closeAllModals, closePopover, h, iconButton, segmented, sep, showModal, swatchRow, textButton, toast, togglePopover, type Placement,
 } from './dom';
 import { icon, type IconName } from './icons';
 import type { ImageQuality } from '../image';
@@ -16,7 +16,8 @@ import { myServer } from '../sync/config';
 import { boardAlmostFull, boardFull, storageFull } from './limitDialogs';
 import { setupCollab, type Collab, type CollabOptions } from './collab';
 import { saveGuestCache, saveYState } from '../db';
-import { APP_VERSION, checkUpdate, type UpdateInfo } from '../version';
+import { APP_VERSION, checkUpdate, isElectron, type UpdateInfo } from '../version';
+import { showDownloadModal } from './downloadModal';
 
 // Shortcuts that can't be changed. Tool keys are configurable in Settings.
 const FIXED_SHORTCUTS: [string, string][] = [
@@ -137,6 +138,9 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
       ]),
       menuItem('fit', 'Zoom to fit', () => ed.zoomToFit()),
       menuItem('settings', 'Settings', showSettings),
+      ...(!isElectron ? [
+        menuItem('desktop', 'Download standalone app (.exe)', showDownloadAppModal),
+      ] : []),
       menuItem('info', 'About Megahard Whiteboard', showAbout),
       ...(availableUpdate?.available ? [
         h('hr'),
@@ -343,8 +347,19 @@ export function mountBoard(root: HTMLElement, doc: BoardDoc, opts: BoardOptions 
       h('p', {}, 'When you join someone’s board as a viewer, you get a board of your own beside it to write on. It stays on your device, and you can copy things from theirs into it.'),
       h('p', {}, `To move boards between devices or keep a backup, use "Save board file" here or "Back up all" on the home screen, then import the ${FILE_EXT} file wherever you need it.`),
       h('div', { class: 'about-update-section' }, checkBtn, statusP),
+      ...(!isElectron ? [
+        h('p', {}, 'Prefer a dedicated app that stays safe from browser cache cleanups? ',
+          h('button', {
+            class: 'link-btn',
+            type: 'button',
+            style: 'background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit;',
+            onclick: () => { closeAllModals(); showDownloadModal(availableUpdate?.latestVersion || APP_VERSION); },
+          }, 'Download the standalone Windows app (.exe)')),
+      ] : []),
       h('p', { class: 'muted' }, 'Megahard Whiteboard is an independent project. It is not affiliated with or endorsed by Microsoft.')));
   }
+
+  const showDownloadAppModal = () => showDownloadModal(availableUpdate?.latestVersion || APP_VERSION);
 
   function showUpdateModal(update: UpdateInfo) {
     showModal(`Update Available: v${update.latestVersion}`, h('div', { class: 'about' },

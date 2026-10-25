@@ -52,6 +52,7 @@ const PATHS = {
   splitSide: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18 14.2a6.5 6.5 0 013.5 5.8"/>',
   sparkle: '<path d="M12 2.5l2.4 6.6 6.6 2.4-6.6 2.4-2.4 6.6-2.4-6.6-6.6-2.4 6.6-2.4z"/>',
+  desktop: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
 } as const;
 
 export type IconName = keyof typeof PATHS;

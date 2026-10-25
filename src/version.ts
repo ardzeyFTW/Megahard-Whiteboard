@@ -79,3 +79,14 @@ export async function checkUpdate(force = false): Promise<UpdateInfo | null> {
     return null;
   }
 }
+
+/** Whether the app is running in the dedicated desktop Electron app. */
+export const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
+
+export function getInstallerUrl(version = APP_VERSION): string {
+  return `https://github.com/${GITHUB_REPO}/releases/download/v${version}/Megahard-Whiteboard-Setup-${version}.exe`;
+}
+
+export function getPortableUrl(version = APP_VERSION): string {
+  return `https://github.com/${GITHUB_REPO}/releases/download/v${version}/Megahard-Whiteboard-${version}-portable.exe`;
+}
