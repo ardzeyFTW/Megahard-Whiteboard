@@ -48,7 +48,7 @@ Megahard Whiteboard is an independent, clean-room project inspired by the everyd
 ![The board menu with background colors, patterns, export and save options](docs/images/board-menu.png)
 
 - Infinite canvas with pan and zoom: the hand tool, wheel, trackpad, pinch, Space+drag or the middle mouse button. Zoom in and out from the corner controls, or **Zoom to fit** to see everything.
-- Select, move, resize, duplicate, recolor, fill and reorder items. The selection bar floats above whatever you pick. Arrow keys nudge it (Shift for bigger steps).
+- Select, move, resize, duplicate, recolor, fill and reorder items. The selection bar floats above whatever you pick. Arrow keys nudge it (Shift for bigger steps). Hold Alt while resizing to scale from the center.
 - Undo and redo, copy, cut and paste (also between boards and browser tabs).
 - Background color (light or dark, including Graphite) plus a plain, grid, dotted or grid-with-dots pattern. New boards start with whichever you picked last.
 - Export as PNG, or save the board as a `.mh` file, from the menu in the top right.

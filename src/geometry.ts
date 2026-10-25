@@ -1,4 +1,4 @@
-import type { Bounds, El, Pt, ShapeKind } from './types';
+import type { Bounds, El, Handle, Pt, ShapeKind } from './types';
 import { fitTextBox } from './text';
 
 export const arrowSize = (strokeWidth: number) => Math.max(12, strokeWidth * 3.5);
@@ -352,4 +352,66 @@ export function transformEl(el: El, from: Bounds, to: Bounds): El {
     default:
       return { ...el, x: X(el.x), y: Y(el.y), w: el.w * sx, h: el.h * sy };
   }
+}
+
+/**
+ * Compute the new bounding box when dragging a resize handle.
+ *
+ * @param from The original bounding box before resizing began.
+ * @param handle Which handle is being dragged.
+ * @param wp The current pointer coordinates in the bounding box's upright coordinate space.
+ * @param min Minimum width and height allowed (e.g. 4 / zoom).
+ * @param keepRatio Whether this selection defaults to keeping aspect ratio (e.g. ink, text, images, notes).
+ * @param shift Whether the Shift key is held (inverts proportional scaling).
+ * @param alt Whether the Alt key is held (resizes symmetrically around the box center).
+ */
+export function resizeBounds(
+  from: Bounds,
+  handle: Handle,
+  wp: Pt,
+  min: number,
+  keepRatio: boolean,
+  shift: boolean,
+  alt: boolean = false
+): Bounds {
+  const cx = from.x + from.w / 2;
+  const cy = from.y + from.h / 2;
+  let x0 = from.x, y0 = from.y, x1 = from.x + from.w, y1 = from.y + from.h;
+
+  if (alt) {
+    let dx = from.w / 2;
+    let dy = from.h / 2;
+    if (handle.includes('w')) dx = Math.max(min / 2, cx - wp.x);
+    if (handle.includes('e')) dx = Math.max(min / 2, wp.x - cx);
+    if (handle.includes('n')) dy = Math.max(min / 2, cy - wp.y);
+    if (handle.includes('s')) dy = Math.max(min / 2, wp.y - cy);
+    x0 = cx - dx;
+    x1 = cx + dx;
+    y0 = cy - dy;
+    y1 = cy + dy;
+  } else {
+    if (handle.includes('w')) x0 = Math.min(wp.x, x1 - min);
+    if (handle.includes('e')) x1 = Math.max(wp.x, x0 + min);
+    if (handle.includes('n')) y0 = Math.min(wp.y, y1 - min);
+    if (handle.includes('s')) y1 = Math.max(wp.y, y0 + min);
+  }
+
+  // Corners keep proportions when shift !== keepRatio.
+  if (handle.length === 2 && shift !== keepRatio && from.w > 0 && from.h > 0) {
+    const s = Math.max((x1 - x0) / from.w, (y1 - y0) / from.h);
+    const w = from.w * s, h = from.h * s;
+    if (alt) {
+      x0 = cx - w / 2;
+      x1 = cx + w / 2;
+      y0 = cy - h / 2;
+      y1 = cy + h / 2;
+    } else {
+      if (handle.includes('w')) x0 = x1 - w;
+      else x1 = x0 + w;
+      if (handle.includes('n')) y0 = y1 - h;
+      else y1 = y0 + h;
+    }
+  }
+
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }

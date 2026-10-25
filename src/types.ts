@@ -10,6 +10,8 @@ export interface Bounds {
   h: number;
 }
 
+export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+
 export type ShapeKind = 'rect' | 'ellipse' | 'triangle' | 'diamond';
 
 /** Freehand ink. `points` is a flat list of [x, y, pressure] triples in world space. */

@@ -1,6 +1,6 @@
-import type { Background, BoardDoc, Bounds, Camera, El, LineEl, Pt, ShapeEl, ShapeKind, StrokeEl } from '../types';
+import type { Background, BoardDoc, Bounds, Camera, El, Handle, LineEl, Pt, ShapeEl, ShapeKind, StrokeEl } from '../types';
 import {
-  boundsOf, clipSegment, cutPolyline, eraseHit, hitTest, inLasso, normRect, rectContains, rectInside, rectsIntersect, rotateEl, rotatePt, rotationOf, transformEl, translateEl,
+  boundsOf, clipSegment, cutPolyline, eraseHit, hitTest, inLasso, normRect, rectContains, rectInside, rectsIntersect, resizeBounds, rotateEl, rotatePt, rotationOf, transformEl, translateEl,
   unionBounds,
 } from '../geometry';
 import { ImageCache, drawBackground, drawElement, drawElements, makeThumbnail, renderBoard, type DrawOpts } from '../render';
@@ -177,7 +177,6 @@ function squareCursor(side: number): string {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${c} ${c}, crosshair`;
 }
 
-type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 const HANDLES: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 const HANDLE_DEGREES: Record<Handle, number> = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 };
 
@@ -396,7 +395,24 @@ export class Editor {
     this.listen(c, 'contextmenu', (e: Event) => e.preventDefault());
     this.listen(window, 'keydown', (e: KeyboardEvent) => this.onKeyDown(e));
     this.listen(window, 'keyup', (e: KeyboardEvent) => {
-      if (e.key === 'Shift') this.updateStrokeShape(false);
+      if (e.key === 'Shift') {
+        this.updateStrokeShape(false);
+        if (this.state?.kind === 'resize' && this.lastPointerWorld) {
+          this.applyResize(this.state, this.lastPointerWorld, false, e.altKey);
+        }
+        this.updateCreateShape(false, e.altKey);
+      }
+      if (e.key === 'Alt') {
+        if (this.state?.kind === 'resize') {
+          e.preventDefault();
+          if (this.lastPointerWorld) {
+            this.applyResize(this.state, this.lastPointerWorld, e.shiftKey, false);
+          }
+        } else if (this.state?.kind === 'create') {
+          e.preventDefault();
+          this.updateCreateShape(e.shiftKey, false);
+        }
+      }
       if (e.key === ' ') {
         this.spaceDown = false;
         this.updateCursor();
@@ -1598,6 +1614,7 @@ export class Editor {
   private beginSelectGesture(e: PointerEvent, sp: Pt, wp: Pt, tool: 'select' | 'lasso') {
     const handle = this.handleAt(sp);
     if (handle) {
+      if (e.altKey) e.preventDefault();
       const originals = this.selectedEls();
       const frame = this.activeFrame();
       const c = frame ? { x: frame.cx, y: frame.cy } : null;
@@ -1724,25 +1741,7 @@ export class Editor {
         break;
       }
       case 'resize': {
-        if (!st.changed) {
-          st.changed = true;
-          this.checkpoint();
-        }
-        const f = st.frame;
-        if (f) {
-          // Resize in the box's own upright space, then turn the result back.
-          const c = { x: f.cx, y: f.cy };
-          const to = this.resizeTarget(st, rotatePt(wp, c, -f.angle), e.shiftKey);
-          const resized = new Map(st.locals.map((o) => [o.id, rotateEl(transformEl(o, st.from, to), c, f.angle)] as const));
-          this.setElements(this.doc.elements.map((el) => resized.get(el.id) ?? el));
-          const mid = rotatePt({ x: to.x + to.w / 2, y: to.y + to.h / 2 }, c, f.angle);
-          this.turned = { cx: mid.x, cy: mid.y, w: to.w, h: to.h, angle: f.angle, els: this.selectedEls() };
-        } else {
-          const to = this.resizeTarget(st, wp, e.shiftKey);
-          const resized = new Map(st.originals.map((o) => [o.id, transformEl(o, st.from, to)] as const));
-          this.setElements(this.doc.elements.map((el) => resized.get(el.id) ?? el));
-        }
-        this.requestRender();
+        this.applyResize(st, wp, e.shiftKey, e.altKey);
         break;
       }
       case 'rotate': {
@@ -1763,7 +1762,7 @@ export class Editor {
         break;
       }
       case 'create':
-        st.el = this.buildShape(st.id, st.start, wp, e.shiftKey);
+        st.el = this.buildShape(st.id, st.start, wp, e.shiftKey, e.altKey);
         this.requestRender();
         break;
     }
@@ -1976,32 +1975,38 @@ export class Editor {
     return out;
   }
 
-  private resizeTarget(st: Extract<Interaction, { kind: 'resize' }>, wp: Pt, shift: boolean): Bounds {
-    const { handle, from } = st;
-    const min = 4 / this.cam.zoom;
-    let x0 = from.x, y0 = from.y, x1 = from.x + from.w, y1 = from.y + from.h;
-    if (handle.includes('w')) x0 = Math.min(wp.x, x1 - min);
-    if (handle.includes('e')) x1 = Math.max(wp.x, x0 + min);
-    if (handle.includes('n')) y0 = Math.min(wp.y, y1 - min);
-    if (handle.includes('s')) y1 = Math.max(wp.y, y0 + min);
-    // Corners keep proportions for ink, notes, text and images; Shift flips that.
-    const keepRatio = st.originals.some((o) => o.type !== 'shape' && o.type !== 'line');
-    if (handle.length === 2 && shift !== keepRatio && from.w > 0 && from.h > 0) {
-      const s = Math.max((x1 - x0) / from.w, (y1 - y0) / from.h);
-      const w = from.w * s, h = from.h * s;
-      if (handle.includes('w')) x0 = x1 - w;
-      else x1 = x0 + w;
-      if (handle.includes('n')) y0 = y1 - h;
-      else y1 = y0 + h;
+  private applyResize(st: Extract<Interaction, { kind: 'resize' }>, wp: Pt, shiftKey: boolean, altKey: boolean) {
+    if (!st.changed) {
+      st.changed = true;
+      this.checkpoint();
     }
-    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    const f = st.frame;
+    if (f) {
+      // Resize in the box's own upright space, then turn the result back.
+      const c = { x: f.cx, y: f.cy };
+      const to = this.resizeTarget(st, rotatePt(wp, c, -f.angle), shiftKey, altKey);
+      const resized = new Map(st.locals.map((o) => [o.id, rotateEl(transformEl(o, st.from, to), c, f.angle)] as const));
+      this.setElements(this.doc.elements.map((el) => resized.get(el.id) ?? el));
+      const mid = rotatePt({ x: to.x + to.w / 2, y: to.y + to.h / 2 }, c, f.angle);
+      this.turned = { cx: mid.x, cy: mid.y, w: to.w, h: to.h, angle: f.angle, els: this.selectedEls() };
+    } else {
+      const to = this.resizeTarget(st, wp, shiftKey, altKey);
+      const resized = new Map(st.originals.map((o) => [o.id, transformEl(o, st.from, to)] as const));
+      this.setElements(this.doc.elements.map((el) => resized.get(el.id) ?? el));
+    }
+    this.requestRender();
+  }
+
+  private resizeTarget(st: Extract<Interaction, { kind: 'resize' }>, wp: Pt, shift: boolean, alt: boolean = false): Bounds {
+    const keepRatio = st.originals.some((o) => o.type !== 'shape' && o.type !== 'line');
+    return resizeBounds(st.from, st.handle, wp, 4 / this.cam.zoom, keepRatio, shift, alt);
   }
 
   private shapeStyle() {
     return { color: this.pens[this.penIndex].color, strokeWidth: 3 };
   }
 
-  private buildShape(id: string, start: Pt, wp: Pt, shift: boolean): ShapeEl | LineEl {
+  private buildShape(id: string, start: Pt, wp: Pt, shift: boolean, alt: boolean = false): ShapeEl | LineEl {
     const { color, strokeWidth } = this.shapeStyle();
     const kind = this.shapeKind;
     if (kind === 'line' || kind === 'arrow') {
@@ -2020,7 +2025,17 @@ export class Editor {
       w = Math.sign(w || 1) * m;
       h = Math.sign(h || 1) * m;
     }
-    return { type: 'shape', id, kind, ...normRect(start.x, start.y, w, h), stroke: color, fill: 'transparent', strokeWidth };
+    const originX = alt ? start.x - w : start.x;
+    const originY = alt ? start.y - h : start.y;
+    const totalW = alt ? w * 2 : w;
+    const totalH = alt ? h * 2 : h;
+    return { type: 'shape', id, kind, ...normRect(originX, originY, totalW, totalH), stroke: color, fill: 'transparent', strokeWidth };
+  }
+
+  private updateCreateShape(shiftKey: boolean, altKey: boolean) {
+    if (this.state?.kind !== 'create' || !this.lastPointerWorld) return;
+    this.state.el = this.buildShape(this.state.id, this.state.start, this.lastPointerWorld, shiftKey, altKey);
+    this.requestRender();
   }
 
   private defaultShape(id: string, c: Pt): ShapeEl | LineEl {
@@ -2066,6 +2081,22 @@ export class Editor {
     if (this.opts.acceptKey && !this.opts.acceptKey(e)) return;
     if (e.key === 'Shift') {
       this.updateStrokeShape(true);
+      if (this.state?.kind === 'resize' && this.lastPointerWorld) {
+        this.applyResize(this.state, this.lastPointerWorld, true, e.altKey);
+      }
+      this.updateCreateShape(true, e.altKey);
+      return;
+    }
+    if (e.key === 'Alt') {
+      if (this.state?.kind === 'resize') {
+        e.preventDefault();
+        if (this.lastPointerWorld) {
+          this.applyResize(this.state, this.lastPointerWorld, e.shiftKey, true);
+        }
+      } else if (this.state?.kind === 'create') {
+        e.preventDefault();
+        this.updateCreateShape(e.shiftKey, true);
+      }
       return;
     }
     const mod = e.ctrlKey || e.metaKey;
