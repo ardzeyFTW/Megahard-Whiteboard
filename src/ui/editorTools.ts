@@ -2,7 +2,7 @@
 // Built once per editor, so a viewer's own board gets a full set beside the shared one.
 import type { Editor, EraserMode, KeyAction, LineEnds, ShapeTool } from '../editor/editor';
 import { SHAPE_TOOLS, isInkTool, keyLabel } from '../editor/editor';
-import { closePopover, h, iconButton, isPopoverFor, segmented, sep, swatchRow, toast, togglePopover, type Placement } from './dom';
+import { closePopover, h, iconButton, isPopoverFor, openPopover, segmented, sep, swatchRow, toast, togglePopover, type Placement } from './dom';
 import { icon, type IconName } from './icons';
 import { HIGHLIGHT_COLORS, INK_COLORS, NOTE_COLORS, PEN_MAX_SIZE, REACTIONS } from '../palette';
 import { TEMPLATES } from '../templates';
@@ -13,6 +13,8 @@ import { openPdfImport } from './pdfImport';
 const SHAPE_LABELS: Record<ShapeTool, string> = {
   rect: 'Rectangle', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Diamond', line: 'Line', arrow: 'Arrow',
 };
+const OPACITY_SNAPS = [25, 50, 75] as const;
+const OPACITY_SNAP_RADIUS = 3;
 
 // Standing-pen illustrations for the ink tray. Colors come from saved prefs, so only plain hex is allowed into the SVG.
 const safeHex = (c: string) => (/^#[0-9a-fA-F]{3,8}$/.test(c) ? c : '#1f1f1f');
@@ -102,25 +104,61 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
     const setInk = (c: string) => pop.style.setProperty('--ink', c);
     setInk(opts.color);
 
-    // Thickness
-    const sizeOut = h('output', { class: 'slider-value' }, String(opts.size));
-    const size = h('input', { type: 'range', class: 'slider', title: 'Thickness', 'aria-label': 'Thickness', min: 1, max: opts.sizeMax, step: 1, value: String(opts.size) });
+    // Thickness: actual stroke diameter preview for pen, scaled to fit for wider tools like highlighter.
+    const dotSize = (s: number) => (opts.sizeMax <= 28 ? s : Math.max(2, Math.round((s / opts.sizeMax) * 28)));
+    const sizeDot = h('span', { class: 'size-dot' });
+    const sizePreview = h('div', { class: 'size-preview', 'aria-hidden': 'true' }, sizeDot);
+    const size = h('input', {
+      type: 'range', class: 'slider', title: 'Thickness', 'aria-label': 'Thickness',
+      'aria-valuetext': `${opts.size} px`, min: 1, max: opts.sizeMax, step: 1, value: String(opts.size),
+    });
+    const syncSizePreview = (v: number) => {
+      size.setAttribute('aria-valuetext', `${v} px`);
+      sizeDot.style.setProperty('--dot-size', `${dotSize(v)}px`);
+    };
+    syncSizePreview(opts.size);
     size.addEventListener('input', () => {
-      sizeOut.textContent = size.value;
-      opts.onChange({ size: Number(size.value) });
+      const v = Number(size.value);
+      syncSizePreview(v);
+      opts.onChange({ size: v });
     });
 
-    // Opacity, as a slider over a see-through track plus a number box
+    // Opacity: see-through slider with snap points and a visual swatch preview.
     const pct = Math.round(opts.opacity * 100);
-    const opacity = h('input', { type: 'range', class: 'slider opacity-slider', title: 'Opacity', 'aria-label': 'Opacity', min: 5, max: 100, step: 1, value: String(pct) });
-    const opacityNum = h('input', { type: 'number', class: 'slider-num', 'aria-label': 'Opacity (%)', min: 5, max: 100, step: 1, value: String(pct) });
-    const setOpacity = (v: number) => {
-      const n = clamp(Math.round(v) || 100, 5, 100);
-      opacity.value = opacityNum.value = String(n);
-      opts.onChange({ opacity: n / 100 });
+    const opacity = h('input', {
+      type: 'range', class: 'slider opacity-slider', title: 'Opacity', 'aria-label': 'Opacity',
+      'aria-valuetext': `${pct}%`, min: 5, max: 100, step: 1, value: String(pct),
+    });
+    const ticks = OPACITY_SNAPS.map((s) => {
+      const tick = h('span', { class: 'slider-tick' });
+      tick.style.setProperty('--tick-pos', `calc(9px + (100% - 18px) * ${(s - 5) / 95})`);
+      return [s, tick] as const;
+    });
+    const opacityWrap = h('div', { class: 'slider-wrap' },
+      opacity,
+      h('div', { class: 'slider-ticks', 'aria-hidden': 'true' }, ...ticks.map(([, el]) => el)));
+    const opacityPreview = h('div', { class: 'opacity-preview', 'aria-hidden': 'true' }, h('span', { class: 'opacity-fill' }));
+
+    const syncOpacityUI = (n: number) => {
+      opacity.value = String(n);
+      opacity.setAttribute('aria-valuetext', `${n}%`);
+      pop.style.setProperty('--alpha', String(n / 100));
+      ticks.forEach(([v, el]) => el.classList.toggle('active', v === n));
     };
-    opacity.addEventListener('input', () => setOpacity(Number(opacity.value)));
-    opacityNum.addEventListener('change', () => setOpacity(Number(opacityNum.value)));
+    syncOpacityUI(pct);
+
+    let keyboardStep = false;
+    opacity.addEventListener('pointerdown', () => { keyboardStep = false; });
+    opacity.addEventListener('keydown', (e) => {
+      keyboardStep = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key);
+    });
+    opacity.addEventListener('input', () => {
+      const raw = clamp(Math.round(Number(opacity.value)) || 100, 5, 100);
+      const snap = keyboardStep ? undefined : OPACITY_SNAPS.find((s) => Math.abs(raw - s) <= OPACITY_SNAP_RADIUS);
+      const n = snap ?? raw;
+      syncOpacityUI(n);
+      opts.onChange({ opacity: n / 100 });
+    });
 
     // Colors: custom picker, the palette, then the last custom color
     const grid = h('div', { class: 'color-grid', role: 'radiogroup', 'aria-label': 'Color' });
@@ -162,7 +200,7 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
     renderCustom();
     markActive(opts.color);
 
-    pop.append(h('div', { class: 'slider-row' }, size, sizeOut), h('div', { class: 'slider-row' }, opacity, opacityNum), h('hr'), grid, picker);
+    pop.append(h('div', { class: 'slider-row' }, size, sizePreview), h('div', { class: 'slider-row' }, opacityWrap, opacityPreview), h('hr'), grid, picker);
 
     // Line ends (pens only)
     if (opts.ends) {
@@ -273,7 +311,14 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
     closePopover();
     ed.insertText();
   });
-  const shapeBtn: HTMLButtonElement = iconButton('shapes', 'Shapes (S)', popoverButton(() => shapeBtn, shapePopover, 'above'));
+  const shapeBtn: HTMLButtonElement = iconButton('shapes', 'Shapes (S)', () => {
+    if (isPopoverFor(shapeBtn)) {
+      closePopover();
+      return;
+    }
+    if (ed.tool !== 'shape') ed.setTool('shape');
+    openPopover(shapeBtn, shapePopover(), 'above');
+  });
   const importBtn = iconButton('import', 'Import image or PDF', () => {
     closePopover();
     imageInput.click();
@@ -360,6 +405,7 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
 
     inkTray.hidden = !isInkTool(t);
     if (inkTray.hidden && trayTools.some((tool) => isPopoverFor(tool.b))) closePopover();
+    if (t !== 'shape' && isPopoverFor(shapeBtn)) closePopover();
     penTools.forEach((p, i) => setActive(p.b, t === 'pen' && ed.penIndex === i));
     setActive(hlTool.b, t === 'highlighter');
     setActive(eraserTool.b, t === 'eraser');
