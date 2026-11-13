@@ -4,7 +4,7 @@ import type { Editor, EraserMode, KeyAction, LineEnds, ShapeTool } from '../edit
 import { SHAPE_TOOLS, isInkTool, keyLabel } from '../editor/editor';
 import { closePopover, h, iconButton, isPopoverFor, openPopover, segmented, sep, swatchRow, toast, togglePopover, type Placement } from './dom';
 import { icon, type IconName } from './icons';
-import { HIGHLIGHT_COLORS, INK_COLORS, NOTE_COLORS, PEN_MAX_SIZE, REACTIONS } from '../palette';
+import { HIGHLIGHT_COLORS, INK_COLORS, NOTE_COLORS, PEN_MAX_SIZE, REACTIONS, SHAPE_MAX_STROKE } from '../palette';
 import { TEMPLATES } from '../templates';
 import { clamp } from '../util';
 import { isPdfFile } from '../pdf';
@@ -90,6 +90,28 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
     ...trayTools.map((t) => t.b), lassoBtn, inkShapeBtn, sep(),
     iconButton('close', 'Stop drawing', () => ed.setTool('select')));
 
+  function thicknessRow(opts: { label: string; value: number; max: number; onInput: (v: number) => void }) {
+    // Actual stroke diameter preview up to 28px; scaled proportionally for wider tools like highlighter.
+    const dotSize = (s: number) => (opts.max <= 28 ? s : Math.max(2, Math.round((s / opts.max) * 28)));
+    const sizeDot = h('span', { class: 'size-dot' });
+    const sizePreview = h('div', { class: 'size-preview', 'aria-hidden': 'true' }, sizeDot);
+    const slider = h('input', {
+      type: 'range', class: 'slider', title: opts.label, 'aria-label': opts.label,
+      'aria-valuetext': `${opts.value} px`, min: 1, max: opts.max, step: 1, value: String(opts.value),
+    });
+    const sync = (v: number) => {
+      slider.setAttribute('aria-valuetext', `${v} px`);
+      sizeDot.style.setProperty('--dot-size', `${dotSize(v)}px`);
+    };
+    sync(opts.value);
+    slider.addEventListener('input', () => {
+      const v = Number(slider.value);
+      sync(v);
+      opts.onInput(v);
+    });
+    return h('div', { class: 'slider-row' }, slider, sizePreview);
+  }
+
   // Pen and highlighter options: thickness and opacity sliders, two rows of colors, line ends.
   function inkPopover(opts: {
     palette: string[];
@@ -104,23 +126,9 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
     const setInk = (c: string) => pop.style.setProperty('--ink', c);
     setInk(opts.color);
 
-    // Thickness: actual stroke diameter preview for pen, scaled to fit for wider tools like highlighter.
-    const dotSize = (s: number) => (opts.sizeMax <= 28 ? s : Math.max(2, Math.round((s / opts.sizeMax) * 28)));
-    const sizeDot = h('span', { class: 'size-dot' });
-    const sizePreview = h('div', { class: 'size-preview', 'aria-hidden': 'true' }, sizeDot);
-    const size = h('input', {
-      type: 'range', class: 'slider', title: 'Thickness', 'aria-label': 'Thickness',
-      'aria-valuetext': `${opts.size} px`, min: 1, max: opts.sizeMax, step: 1, value: String(opts.size),
-    });
-    const syncSizePreview = (v: number) => {
-      size.setAttribute('aria-valuetext', `${v} px`);
-      sizeDot.style.setProperty('--dot-size', `${dotSize(v)}px`);
-    };
-    syncSizePreview(opts.size);
-    size.addEventListener('input', () => {
-      const v = Number(size.value);
-      syncSizePreview(v);
-      opts.onChange({ size: v });
+    const sizeRow = thicknessRow({
+      label: 'Thickness', value: opts.size, max: opts.sizeMax,
+      onInput: (size) => opts.onChange({ size }),
     });
 
     // Opacity: see-through slider with snap points and a visual swatch preview.
@@ -200,7 +208,7 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
     renderCustom();
     markActive(opts.color);
 
-    pop.append(h('div', { class: 'slider-row' }, size, sizePreview), h('div', { class: 'slider-row' }, opacityWrap, opacityPreview), h('hr'), grid, picker);
+    pop.append(sizeRow, h('div', { class: 'slider-row' }, opacityWrap, opacityPreview), h('hr'), grid, picker);
 
     // Line ends (pens only)
     if (opts.ends) {
@@ -269,6 +277,8 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
   });
 
   function shapePopover() {
+    const pop = h('div', { class: 'pop-section shape-pop' });
+    pop.style.setProperty('--ink', ed.pens[ed.penIndex].color);
     const grid = h('div', { class: 'shape-grid' });
     for (const k of SHAPE_TOOLS) {
       grid.append(iconButton(k, SHAPE_LABELS[k], () => {
@@ -278,7 +288,12 @@ export function createEditorTools(ed: Editor, view: HTMLElement): EditorTools {
         toast(`Drag on the board to draw ${/^[aeiou]/.test(name) ? 'an' : 'a'} ${name}`);
       }, ed.shapeKind === k ? 'active' : ''));
     }
-    return h('div', { class: 'pop-section' }, h('div', { class: 'pop-label' }, 'Shapes'), grid);
+    const strokeRow = thicknessRow({
+      label: 'Shape thickness', value: ed.shapeStrokeWidth, max: SHAPE_MAX_STROKE,
+      onInput: (w) => ed.setShapeStrokeWidth(w),
+    });
+    pop.append(h('div', { class: 'pop-label' }, 'Shapes'), grid, h('hr'), strokeRow);
+    return pop;
   }
 
   // Less common things to add live together behind one button.

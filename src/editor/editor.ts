@@ -17,7 +17,7 @@ import { buildTemplate, type TemplateId } from '../templates';
 import { prepareImage, type ImageQuality } from '../image';
 import { isPdfFile } from '../pdf';
 import { layoutPages, type StackOptions } from '../pdfLayout';
-import { HIGHLIGHT_COLORS, NOTE_COLORS, PEN_MAX_SIZE } from '../palette';
+import { HIGHLIGHT_COLORS, NOTE_COLORS, PEN_MAX_SIZE, SHAPE_MAX_STROKE } from '../palette';
 import { readPrefs, writePrefs } from '../prefs';
 import { LIMITS, getUsage, type Usage } from '../limits';
 import { isElectron } from '../version';
@@ -271,6 +271,7 @@ export class Editor {
   /** Last color picked with the custom color picker, offered again in the color menus. */
   customColor: string | null = null;
   shapeKind: ShapeTool = 'rect';
+  shapeStrokeWidth = 3;
   noteColor = NOTE_COLORS[0];
   inkToShape = false;
   /** Vary line thickness with stylus pressure, or with drawing speed for mouse and touch. */
@@ -622,6 +623,7 @@ export class Editor {
       if (typeof p.eraser?.size === 'number') this.eraser.size = clamp(Math.round(p.eraser.size), 8, 80);
       if (typeof p.customColor === 'string' && HEX.test(p.customColor)) this.customColor = p.customColor;
       if (SHAPE_TOOLS.includes(p.shapeKind)) this.shapeKind = p.shapeKind;
+      if (typeof p.shapeStrokeWidth === 'number') this.shapeStrokeWidth = clamp(Math.round(p.shapeStrokeWidth), 1, SHAPE_MAX_STROKE);
       if (NOTE_COLORS.includes(p.noteColor)) this.noteColor = p.noteColor;
       if (typeof p.penIndex === 'number') this.penIndex = clamp(Math.round(p.penIndex), 0, 2);
       this.inkToShape = p.inkToShape === true;
@@ -640,8 +642,8 @@ export class Editor {
 
   private savePrefs() {
     if (this.readOnly) return;
-    const { tool, pens, highlighter, eraser, shapeKind, noteColor, inkToShape, penIndex, dynamicInk, imageQuality, keys, customColor } = this;
-    writePrefs({ tool, pens, highlighter, eraser, shapeKind, noteColor, inkToShape, penIndex, dynamicInk, imageQuality, keys, customColor });
+    const { tool, pens, highlighter, eraser, shapeKind, shapeStrokeWidth, noteColor, inkToShape, penIndex, dynamicInk, imageQuality, keys, customColor } = this;
+    writePrefs({ tool, pens, highlighter, eraser, shapeKind, shapeStrokeWidth, noteColor, inkToShape, penIndex, dynamicInk, imageQuality, keys, customColor });
   }
 
   // ---------------------------------------------------------------- state
@@ -1004,6 +1006,12 @@ export class Editor {
     this.shapeKind = kind;
     this.savePrefs();
     this.setTool('shape');
+  }
+
+  setShapeStrokeWidth(width: number) {
+    this.shapeStrokeWidth = clamp(Math.round(width), 1, SHAPE_MAX_STROKE);
+    this.savePrefs();
+    this.emitChange();
   }
 
   setInkToShape(on: boolean) {
@@ -2014,7 +2022,7 @@ export class Editor {
   }
 
   private shapeStyle() {
-    return { color: this.pens[this.penIndex].color, strokeWidth: 3 };
+    return { color: this.pens[this.penIndex].color, strokeWidth: this.shapeStrokeWidth };
   }
 
   private buildShape(id: string, start: Pt, wp: Pt, shift: boolean, alt: boolean = false): ShapeEl | LineEl {

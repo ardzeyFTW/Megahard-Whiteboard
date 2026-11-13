@@ -8,6 +8,7 @@ export const HIGHLIGHT_COLORS = ['#ffe94d', '#8ff07c', '#6fe3ff', '#ff9be0', '#f
 export const NOTE_COLORS = ['#fff4a3', '#ffd8a8', '#ffc9de', '#e0cffc', '#c5e3ff', '#c3f0cf', '#e9ecef'];
 
 export const PEN_MAX_SIZE = 8;
+export const SHAPE_MAX_STROKE = 16;
 export const HIGHLIGHT_SIZES = [12, 22, 34];
 
 export const BACKGROUNDS = [
